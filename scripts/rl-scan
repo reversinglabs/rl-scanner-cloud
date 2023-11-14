@@ -1,0 +1,199 @@
+#!/usr/bin/env python3
+
+import sys
+import argparse
+import time
+
+from urllib.parse import (
+    urlsplit,
+    parse_qs,
+)
+from requests import exceptions
+
+from request_factory import (
+    RequestFactory,
+    Params,
+)
+from file_validator import FileValidator
+from cimessages import (
+    Messages,
+    MessageFormat,
+)
+
+ATTEMPT_TIMEOUT_SEC = 30
+
+DEFAULT_ATTEMPT_TIMEOUT_MIN = 20
+LOWER_ATTEMPT_TIMEOUT_MIN = 10
+UPPER_ATTEMPT_TIMEOUT_MIN = 1440  # 24h
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        prog="rl-scan",
+        description="ReversingLabs: rl-scanner-cloud\n\n"
+        "Extended product documentation is available at: https://docs.secure.software",
+        epilog="Environment variables:\n"
+        "  RLPORTAL_ACCESS_TOKEN    - Token used to access to the secure.software portal\n"
+        "  RLSECURE_PROXY_SERVER    - Server URL for local proxy\n"
+        "  RLSECURE_PROXY_PORT      - Network port for local proxy\n"
+        "  RLSECURE_PROXY_USER      - User name for proxy authentication\n"
+        "  RLSECURE_PROXY_PASSWORD  - Password for proxy authentication\n",
+    )
+
+    parser.add_argument(
+        "--rl-portal-server",
+        required=True,
+        help="Portal that will do the scanning",
+    )
+
+    parser.add_argument(
+        "--rl-portal-org",
+        required=True,
+    )
+
+    parser.add_argument(
+        "--rl-portal-group",
+        required=True,
+    )
+
+    parser.add_argument(
+        "--purl",
+        required=True,
+        help="Package URL used for the scan (format [pkg:namespace]/<project></package><@version>)",
+    )
+
+    parser.add_argument(
+        "--file-path",
+        required=True,
+        help="Path to the file you want to scan",
+    )
+
+    parser.add_argument(
+        "--filename",
+        help="Defaults to the name of the selected file",
+    )
+
+    parser.add_argument(
+        "--replace",
+        action="store_true",
+        help="Replace the existing package version within the package, or reproducible build if build type is repro",
+    )
+
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="If a package has the maximum number of versions, then the oldest version of the package will be deleted to make space for the version you're uploading",
+    )
+
+    parser.add_argument(
+        "--submit-only",
+        action="store_true",
+        help="Scan the file, and continue regardless of the scan outcome",
+    )
+
+    parser.add_argument(
+        "--diff-with",
+        help="Selected analyzed package version to compare against the uploaded version",
+    )
+
+    parser.add_argument(
+        "--message-reporter",
+        choices=[message_format.value for message_format in MessageFormat],
+        default="text",
+        help="Processing status message format",
+    )
+
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=DEFAULT_ATTEMPT_TIMEOUT_MIN,
+        help="Amount of time user is willing to wait for analysis before failing. Defaults to 20 minutes",
+    )
+
+    params: Params = parser.parse_args()
+    k: str = "pkg:rl/"
+    if not params.purl.startswith(k):
+        params.purl = k + params.purl
+
+    FileValidator.validate_file(params.file_path)
+
+    reporter = Messages.create(params.message_reporter)
+
+    query = parse_qs(urlsplit(params.purl).query)
+    if "build" in query and not ("version" in query["build"] or "repro" in query["build"]):
+        reporter.info("Wrong build type set, has to be either version or repro")
+        sys.exit(1)
+
+    with reporter.progress_block("Scanning version"):
+        with open(params.file_path, "rb") as file:
+            try:
+                response = RequestFactory().post_scan_version_request(params, file)
+                response.raise_for_status()
+
+                if params.submit_only:
+                    reporter.info("submit-only flag present, skip waiting for analysis result")
+                    reporter.scan_result(True)
+                    return 0
+
+            except exceptions.HTTPError as error:
+                error_message = error.response.json()
+                reporter.info(error_message.get("error", f"Something went wrong with version scanning {error}"))
+                sys.exit(1)
+
+    timeout = params.timeout
+    if timeout not in range(LOWER_ATTEMPT_TIMEOUT_MIN, UPPER_ATTEMPT_TIMEOUT_MIN):
+        timeout = DEFAULT_ATTEMPT_TIMEOUT_MIN
+        reporter.info(
+            f"""
+            Value of timeout parameter is out of bounds ({LOWER_ATTEMPT_TIMEOUT_MIN} - {UPPER_ATTEMPT_TIMEOUT_MIN}).
+            Will set it to default {DEFAULT_ATTEMPT_TIMEOUT_MIN} minutes
+        """
+        )
+
+    number_of_attempts = (timeout * 60) // ATTEMPT_TIMEOUT_SEC
+
+    with reporter.progress_block("Fetching analysis status"):
+        while True:
+            try:
+                if number_of_attempts == 0:
+                    reporter.info("Preset timeout time expired")
+                    reporter.scan_result(False)
+                    return 1
+
+                reporter.info("Attempting to fetch analysis status")
+                time.sleep(ATTEMPT_TIMEOUT_SEC)
+
+                response = RequestFactory().get_performed_checks_request(params)
+                response.raise_for_status()
+            except exceptions.HTTPError as error:
+                # TODO remove, hardcoded until SWAP-916 approval
+                if error.response.status_code == 400:
+                    number_of_attempts -= 1
+                    continue
+
+                error_message = error.response.json()
+
+                reporter.info(error_message.get("error", f"Something went wrong with version scanning {error}"))
+                sys.exit(1)
+
+            passed_analysis = (
+                response.json()
+                .get("analysis", {})
+                .get("report", {})
+                .get("info", {})
+                .get("summary", {})
+                .get("scan_status", "fail")
+            ) == "pass"
+
+            reporter.scan_result(passed_analysis)
+
+            return 0 if passed_analysis else 1
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        sys.exit(1)
