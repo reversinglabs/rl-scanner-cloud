@@ -123,7 +123,7 @@ def main() -> int:
     query = parse_qs(urlsplit(params.purl).query)
     if "build" in query and not ("version" in query["build"] or "repro" in query["build"]):
         reporter.info("Wrong build type set, has to be either version or repro")
-        sys.exit(1)
+        sys.exit(101)
 
     with reporter.progress_block("Scanning version"):
         with open(params.file_path, "rb") as file:
@@ -139,7 +139,10 @@ def main() -> int:
             except exceptions.HTTPError as error:
                 error_message = error.response.json()
                 reporter.info(error_message.get("error", f"Something went wrong with version scanning {error}"))
-                sys.exit(1)
+                sys.exit(101)
+            except exceptions.JSONDecodeError as _:
+                reporter.info("Something went wrong with your request")
+                sys.exit(101)
 
     timeout = params.timeout
     if timeout not in range(LOWER_ATTEMPT_TIMEOUT_MIN, UPPER_ATTEMPT_TIMEOUT_MIN):
@@ -166,16 +169,18 @@ def main() -> int:
 
                 response = RequestFactory().get_performed_checks_request(params)
                 response.raise_for_status()
-            except exceptions.HTTPError as error:
-                # TODO remove, hardcoded until SWAP-916 approval
-                if error.response.status_code == 400:
+
+                if response.status_code == 202:
                     number_of_attempts -= 1
                     continue
 
+            except exceptions.HTTPError as error:
                 error_message = error.response.json()
-
                 reporter.info(error_message.get("error", f"Something went wrong with version scanning {error}"))
-                sys.exit(1)
+                sys.exit(101)
+            except exceptions.JSONDecodeError as _:
+                reporter.info("Something went wrong with your request")
+                sys.exit(101)
 
             passed_analysis = (
                 response.json()
