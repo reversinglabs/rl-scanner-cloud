@@ -1,30 +1,13 @@
 #!/usr/bin/env python3
-
 import sys
 import argparse
-import time
 
-from urllib.parse import (
-    urlsplit,
-    parse_qs,
-)
-from requests import exceptions
-
-from request_factory import (
-    RequestFactory,
-    Params,
-)
-from file_validator import FileValidator
-from cimessages import (
-    Messages,
-    MessageFormat,
-)
-
-ATTEMPT_TIMEOUT_SEC = 30
-
-DEFAULT_ATTEMPT_TIMEOUT_MIN = 20
-LOWER_ATTEMPT_TIMEOUT_MIN = 10
-UPPER_ATTEMPT_TIMEOUT_MIN = 1440  # 24h
+from params import Params
+from request_invoker import RequestInvoker
+from checks_fetcher import ChecksFetcher, DEFAULT_ATTEMPT_TIMEOUT_MIN
+from validators import validate_folder, validate_file, validate_purl, validate_report_formats
+from cimessages import Messages, MessageFormat
+from analysis_report_exporter import AnalysisReportExporter
 
 
 def main() -> int:
@@ -111,89 +94,45 @@ def main() -> int:
         help="Amount of time user is willing to wait for analysis before failing. Defaults to 20 minutes",
     )
 
-    params: Params = parser.parse_args()
-    k: str = "pkg:rl/"
-    if not params.purl.startswith(k):
-        params.purl = k + params.purl
+    parser.add_argument(
+        "--report-format",
+        type=str,
+        help="A comma-separated list of report formats to generate. Supported values: cyclonedx, sarif, spdx, rl-json, rl-checks, all",
+    )
 
-    FileValidator.validate_file(params.file_path)
+    parser.add_argument(
+        "--report-path",
+        help="Path to a directory where the selected reports will be saved",
+    )
+
+    params: Params = parser.parse_args()
+
+    params.purl = validate_purl(params.purl)
+    validate_file(params.file_path)
+    validate_folder(params.report_path, params.report_format)
+    validate_report_formats(params.report_format)
 
     reporter = Messages.create(params.message_reporter)
 
-    query = parse_qs(urlsplit(params.purl).query)
-    if "build" in query and not ("version" in query["build"] or "repro" in query["build"]):
-        reporter.info("Wrong build type set, has to be either version or repro")
-        sys.exit(101)
-
     with reporter.progress_block("Scanning version"):
         with open(params.file_path, "rb") as file:
-            try:
-                response = RequestFactory().post_scan_version_request(params, file)
-                response.raise_for_status()
+            RequestInvoker(reporter).scan_version(params, file)
 
-                if params.submit_only:
-                    reporter.info("submit-only flag present, skip waiting for analysis result")
-                    reporter.scan_result(True)
-                    return 0
-
-            except exceptions.HTTPError as error:
-                error_message = error.response.json()
-                reporter.info(error_message.get("error", f"Something went wrong with version scanning {error}"))
-                sys.exit(101)
-            except exceptions.JSONDecodeError as _:
-                reporter.info("Something went wrong with your request")
-                sys.exit(101)
-
-    timeout = params.timeout
-    if timeout not in range(LOWER_ATTEMPT_TIMEOUT_MIN, UPPER_ATTEMPT_TIMEOUT_MIN):
-        timeout = DEFAULT_ATTEMPT_TIMEOUT_MIN
-        reporter.info(
-            f"""
-            Value of timeout parameter is out of bounds ({LOWER_ATTEMPT_TIMEOUT_MIN} - {UPPER_ATTEMPT_TIMEOUT_MIN}).
-            Will set it to default {DEFAULT_ATTEMPT_TIMEOUT_MIN} minutes
-        """
-        )
-
-    number_of_attempts = (timeout * 60) // ATTEMPT_TIMEOUT_SEC
+            if params.submit_only:
+                reporter.info("submit-only flag present, skip waiting for analysis result")
+                reporter.scan_result(True)
+                return 0
 
     with reporter.progress_block("Fetching analysis status"):
-        while True:
-            try:
-                if number_of_attempts == 0:
-                    reporter.info("Preset timeout time expired")
-                    reporter.scan_result(False)
-                    return 1
+        scan_status = ChecksFetcher(params, reporter).get_scan_status()
+        passed_analysis = scan_status == "pass"
+        reporter.scan_result(passed_analysis)
 
-                reporter.info("Attempting to fetch analysis status")
-                time.sleep(ATTEMPT_TIMEOUT_SEC)
+    if params.report_format and params.report_path:
+        with reporter.progress_block("Exporting analysis report"):
+            AnalysisReportExporter(params, reporter).export_analysis_report()
 
-                response = RequestFactory().get_performed_checks_request(params)
-                response.raise_for_status()
-
-                if response.status_code == 202:
-                    number_of_attempts -= 1
-                    continue
-
-            except exceptions.HTTPError as error:
-                error_message = error.response.json()
-                reporter.info(error_message.get("error", f"Something went wrong with version scanning {error}"))
-                sys.exit(101)
-            except exceptions.JSONDecodeError as _:
-                reporter.info("Something went wrong with your request")
-                sys.exit(101)
-
-            passed_analysis = (
-                response.json()
-                .get("analysis", {})
-                .get("report", {})
-                .get("info", {})
-                .get("summary", {})
-                .get("scan_status", "fail")
-            ) == "pass"
-
-            reporter.scan_result(passed_analysis)
-
-            return 0 if passed_analysis else 1
+    return 0 if passed_analysis else 1
 
 
 if __name__ == "__main__":

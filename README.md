@@ -2,12 +2,12 @@
 
 ![Header image](https://github.com/reversinglabs/rl-scanner-cloud/raw/main/armando-docker-cloud.png)
 
-`reversinglabs/rl-scanner-cloud` is the official Docker image created by ReversingLabs 
+`reversinglabs/rl-scanner-cloud` is the official Docker image created by ReversingLabs
 for users who want to automate their workflows on the secure.software Portal and integrate it with CI/CD tools.
 
 The image provides access to the main Portal Projects workflows - uploading package versions to a project,
 scanning them, and generating analysis reports.
-You can also compare different package versions in a project, and analyze reproducible build artifacts for a package version. 
+You can also compare different package versions in a project, analyze reproducible build artifacts for a package version, and save analysis reports to local storage.
 All successfully analyzed files are visible in the Portal interface, and accessible by you and any other Portal users who can access your projects.
 
 This Docker image is based on Rocky Linux 9.
@@ -41,7 +41,7 @@ The following table lists more detailed differences between these two Docker ima
 |             | **rl-scanner** | **rl-scanner-cloud** |
 |:----        |:----           | :----                |
 | Scanning | Software packages are scanned inside the Docker container, on the local system where the container is running. | Software packages are scanned in the cloud, on the Portal instance to which they are uploaded. |
-| Reports  | Users can choose the report format(s) they want to generate, and automatically save the reports to local storage. | All report formats supported by the Portal are always generated (not configurable). Users can manually download the reports from the Portal web interface or via the [Portal Public APIs](https://docs.secure.software/api/). The rl-json and rl-checks reports can only be downloaded via the APIs. The HTML report (rl-html format) cannot be downloaded. |
+| Reports  | Users can choose the report format(s) they want to generate, and automatically save the reports to local storage. | Users can choose the report format(s) they want to generate and save them to local storage. The HTML report (rl-html format) is always generated and displayed in the Portal web interface. |
 | Accounts and licensing | A valid `rl-secure` license with site key is required to use the Docker image. The size of analyzed files is deducted from the quota allocated to the user's `rl-secure` account. | An active secure.software Portal account with a Personal Access Token is required to use the Docker image. The size of analyzed files is deducted from the analysis capacity that is allocated to the user's group and reserved for projects. |
 
 
@@ -75,13 +75,13 @@ This makes it easier for cautious customers to use versioned tag images and migr
 The most common workflow for this Docker image is to upload a file for analysis to a secure.software Portal instance, where it is added as a package version to a new or an existing project and package.
 Portal users can then view the analysis report and [manage the analyzed file](https://docs.secure.software/portal/projects#work-with-package-versions-releases) like any other package version.
 
-Access to input data (files you want to scan) is provided by using [Docker volume mounts](https://docs.docker.com/storage/volumes/).
+Access to input data (files you want to scan) and the reports destination directory (to optionally save analysis reports) is provided by using [Docker volume mounts](https://docs.docker.com/storage/volumes/).
 To prevent issues with file ownership and access, the `-u` option is used to provide current user identification to the container.
 
 The image wraps the functionality of several Portal Public API endpoints into a single command with [configurable parameters](#configuration-parameters).
 As a result, users don't have to send multiple API requests, because the whole workflow can be completed in a single run.
 
-To use the provided Portal functionality, an active account on a Portal instance is required, together with a Personal Access Token for API authentication. 
+To use the provided Portal functionality, an active account on a Portal instance is required, together with a Personal Access Token for API authentication.
 Before you start using the image, make sure all [prerequisites](#prerequisites) are satisfied.
 
 In some cases, a proxy server may be required to access the internet and connect to ReversingLabs servers.
@@ -96,7 +96,7 @@ To successfully use this Docker image, you need:
 
 2. **An active secure.software Portal account and a Personal Access Token generated for it**. If you don't already have a Portal account, you may need to contact the administrator of your Portal organization to [invite you](https://docs.secure.software/portal/members#invite-a-new-member). Alternatively, if you're not a secure.software customer yet, you can [contact ReversingLabs](https://docs.secure.software/portal/#get-access-to-securesoftware-portal) to sign up for a Portal account. When you have an account set up, follow the instructions to [generate a Personal Access Token](https://docs.secure.software/api/generate-api-token).
 
-3. **One or more software packages to analyze**. Your packages must be stored in a location that Docker will be able to access. 
+3. **One or more software packages to analyze**. Your packages must be stored in a location that Docker will be able to access.
 
 
 ## Environment variables
@@ -130,6 +130,8 @@ The `rl-scanner-cloud` image supports the following parameters.
 | `--submit-only`      | No | By default, the Docker container runs until the uploaded file is analyzed on the Portal and returns the result in the output. This optional parameter lets you skip waiting for the analysis result. |
 | `--timeout`          | No | This optional parameter lets you specify how long the container should wait for analysis to complete before exiting (in minutes). The parameter accepts any integer from 10 to 1440. The default timeout is 20 minutes. |
 | `--message-reporter` | No  | Optional parameter that changes the format of output messages (STDOUT) for easier integration with CI tools. Supported values: `text`, `teamcity` |
+| `--report-path`      | No  | Path to the location where you want to store analysis reports. The specified path must exist in the reports destination directory mounted to the container. |
+| `--report-format`    | No  | A comma-separated list of report formats to generate. Supported values: cyclonedx, sarif, spdx, rl-json, rl-checks, all |
 
 
 ## Return codes
@@ -157,21 +159,53 @@ The file is added to the specified organization and group, and assigned as a ver
 After the file is uploaded to the Portal, it's visible in the web interface while the analysis is pending.
 
 
-```
     docker run \
       -u $(id -u):$(id -g) \
       -v "$(pwd)/packages:/packages:ro" \
       -e RLPORTAL_ACCESS_TOKEN=exampletoken \
       reversinglabs/rl-scanner-cloud \
-        --rl-portal-server=demo \
-        --rl-portal-org=ExampleOrg \
-        --rl-portal-group=demo-group \
-        --purl=my-project/my-package@1.0 \
-        --file-path=/packages/demo-packages/MyPackage_1.exe
-```
+        --rl-portal-server demo \
+        --rl-portal-org ExampleOrg \
+        --rl-portal-group demo-group \
+        --purl my-project/my-package@1.0 \
+        --file-path /packages/demo-packages/MyPackage_1.exe
 
 
-4. The container exits automatically when the analysis is complete. You can then access the analysis report in the Portal web interface and continue to work with the package version you just uploaded. 
+
+4. The container exits automatically when the analysis is complete. You can then access the analysis report in the Portal web interface and continue to work with the package version you just uploaded.
+
+
+### Scan a package version and download analysis reports
+
+To download analysis reports, you can use the `--report-path` and `--report-format` parameters when scanning a file.
+These parameters are optional, but they must be used together.
+
+To store the reports to a specific location, you must use an additional volume and make sure Docker can write to it.
+In this example, we're adding the volume with `-v "$(pwd)/reports:/reports"`, so the destination directory is going to be called `reports`. 
+This destination directory must be created empty before starting the container.
+You will then specify it in the Docker command with the `--report-path` parameter.
+
+The `--report-format` parameter accepts any of the [supported report formats](https://docs.secure.software/cli/commands/report).
+To request multiple formats at once, specify them as a comma-separated list.
+The special value `all` will download all supported report formats.
+
+The following command will scan a package version (1.0) and save all supported report formats into the `/reports` directory on the mounted volume.
+Other configuration parameters are the same in this example as in the other examples in this text.
+
+
+    docker run \
+      -u $(id -u):$(id -g) \
+      -v "$(pwd)/packages:/packages:ro" \
+      -v "$(pwd)/reports:/reports" \
+      -e RLPORTAL_ACCESS_TOKEN=exampletoken \
+      reversinglabs/rl-scanner-cloud \
+        --rl-portal-server demo \
+        --rl-portal-org ExampleOrg \
+        --rl-portal-group demo-group \
+        --purl my-project/my-package@1.0 \
+        --file-path /packages/demo-packages/MyPackage_1.exe \
+        --report-path /reports \
+        --report-format all 
 
 
 ### Compare package versions in a Portal project
@@ -183,19 +217,17 @@ The following command will scan a new package version (1.1) and generate a repor
 Other configuration parameters are the same in this example as in the other examples in this text.
 
 
-```
     docker run \
       -u $(id -u):$(id -g) \
       -v "$(pwd)/packages:/packages:ro" \
       -e RLPORTAL_ACCESS_TOKEN=exampletoken \
       reversinglabs/rl-scanner-cloud \
-        --rl-portal-server=demo \
-        --rl-portal-org=ExampleOrg \
-        --rl-portal-group=demo-group \
-        --purl=my-project/my-package@1.1 \
-        --file-path=/packages/demo-packages/MyPackage_1-1.exe \
+        --rl-portal-server demo \
+        --rl-portal-org ExampleOrg \
+        --rl-portal-group demo-group \
+        --purl my-project/my-package@1.1 \
+        --file-path /packages/demo-packages/MyPackage_1-1.exe \
         --diff-with=1.0
-```
 
 
 The analysis report of the new version will contain the **Diff** tab with all the differences between the two versions.
@@ -217,18 +249,16 @@ The following command will scan the new artifact and perform a build reproducibi
 Other configuration parameters are the same in this example as in the other examples in this text.
 
 
-```
     docker run \
       -u $(id -u):$(id -g) \
       -v "$(pwd)/packages:/packages:ro" \
       -e RLPORTAL_ACCESS_TOKEN=exampletoken \
       reversinglabs/rl-scanner-cloud \
-        --rl-portal-server=demo \
-        --rl-portal-org=ExampleOrg \
-        --rl-portal-group=demo-group \
-        --purl=my-project/my-package@1.0?build=repro \
-        --file-path=/packages/demo-packages/MyPackage_1-build1.exe \
-```
+        --rl-portal-server demo \
+        --rl-portal-org ExampleOrg \
+        --rl-portal-group demo-group \
+        --purl my-project/my-package@1.0?build=repro \
+        --file-path /packages/demo-packages/MyPackage_1-build1.exe 
 
 
 The analysis report will contain the **Reproducibility** tab with the reproducibility check status and a summary of differences between the reproducible build artifact and the main artifact ("Reference Version" in the report).
