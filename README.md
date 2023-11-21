@@ -125,7 +125,7 @@ The `rl-scanner-cloud` image supports the following parameters.
 | `--file-path`        | **Yes** | Path to the file you want to scan. The specified file must exist in the **package source** directory mounted to the Docker container. The file must be in any of the [formats supported by secure.software](https://docs.secure.software/concepts/reference). The file size on disk must not exceed 10 GB. |
 | `--filename`         | No  | Optional name for the file you want to scan. If omitted, defaults to the file name specified with `--file-path`. When the file is uploaded and analyzed on the Portal, this file name is visible in the reports. |
 | `--replace`          | No  | Replace (overwrite) an already existing package version with the file you're uploading. |
-| `--force`            | No  | In secure.software Portal, a package can only have a limited amount of versions. If a package already has the maximum number of versions, you can use this optional parameter to delete the oldest version of the package and make space for the version you're uploading. **This option is implicitly enabled by default.** |
+| `--force`            | No  | In secure.software Portal, a package can only have a limited amount of versions. If a package already has the maximum number of versions, you can use this optional parameter to delete the oldest version of the package and make space for the version you're uploading. |
 | `--diff-with`        | No  | This optional parameter lets you specify a previous package version against which you want to compare (diff) the version you're uploading. The specified version must exist in the package. This parameter is ignored when analyzing reproducible build artifacts. |
 | `--submit-only`      | No | By default, the Docker container runs until the uploaded file is analyzed on the Portal and returns the result in the output. This optional parameter lets you skip waiting for the analysis result. |
 | `--timeout`          | No | This optional parameter lets you specify how long the container should wait for analysis to complete before exiting (in minutes). The parameter accepts any integer from 10 to 1440. The default timeout is 20 minutes. |
@@ -164,6 +164,7 @@ After the file is uploaded to the Portal, it's visible in the web interface whil
       -v "$(pwd)/packages:/packages:ro" \
       -e RLPORTAL_ACCESS_TOKEN=exampletoken \
       reversinglabs/rl-scanner-cloud \
+      rl-scan \
         --rl-portal-server demo \
         --rl-portal-org ExampleOrg \
         --rl-portal-group demo-group \
@@ -199,6 +200,7 @@ Other configuration parameters are the same in this example as in the other exam
       -v "$(pwd)/reports:/reports" \
       -e RLPORTAL_ACCESS_TOKEN=exampletoken \
       reversinglabs/rl-scanner-cloud \
+      rl-scan \
         --rl-portal-server demo \
         --rl-portal-org ExampleOrg \
         --rl-portal-group demo-group \
@@ -222,6 +224,7 @@ Other configuration parameters are the same in this example as in the other exam
       -v "$(pwd)/packages:/packages:ro" \
       -e RLPORTAL_ACCESS_TOKEN=exampletoken \
       reversinglabs/rl-scanner-cloud \
+      rl-scan \
         --rl-portal-server demo \
         --rl-portal-org ExampleOrg \
         --rl-portal-group demo-group \
@@ -254,6 +257,7 @@ Other configuration parameters are the same in this example as in the other exam
       -v "$(pwd)/packages:/packages:ro" \
       -e RLPORTAL_ACCESS_TOKEN=exampletoken \
       reversinglabs/rl-scanner-cloud \
+      rl-scan \
         --rl-portal-server demo \
         --rl-portal-org ExampleOrg \
         --rl-portal-group demo-group \

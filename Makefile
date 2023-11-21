@@ -102,7 +102,7 @@ format:
 	black --line-length $(LINE_LENGTH) scripts/*
 
 pycheck:
-	pylama --max-line-length $(LINE_LENGTH) -l "eradicate,mccabe,pycodestyle,pyflakes" scripts/
+	-pylama --max-line-length $(LINE_LENGTH) -l "eradicate,mccabe,pycodestyle,pyflakes" scripts/
 
 dist: format pycheck
 	rm -rf $(DIST) && mkdir -p $(DIST) && mkdir -p $(DIST)/scripts

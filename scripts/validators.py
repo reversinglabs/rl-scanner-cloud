@@ -4,6 +4,9 @@ from urllib.parse import (
     urlsplit,
     parse_qs,
 )
+from request_factory import RequestFactory
+from helpers import get_version, has_repro
+from params import Params
 
 from typing import List
 
@@ -51,3 +54,29 @@ def validate_report_formats(report_format: str) -> List[str]:
         return
 
     return AnalysisReportExporter.parse_report_formats(report_format)
+
+
+def validate_force_and_replace(params: Params) -> Params:
+    if params.force and params.replace:
+        if has_repro(params.purl):
+            params.force = False
+            return params
+
+        response = RequestFactory().get_package_versions(params)
+        if response.status_code == 404:
+            params.replace = False
+            params.force = False
+
+        elif response.status_code == 200:
+            data = response.json()
+            purl_version = get_version(params.purl)
+            version_exists = [version for version in data.get("versions") if version.get("version") == purl_version]
+            if version_exists:
+                params.force = False
+            else:
+                params.replace = False
+
+        else:
+            raise RuntimeError("Something went wrong while validating force and replace parameters")
+
+    return params

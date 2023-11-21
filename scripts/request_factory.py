@@ -3,7 +3,7 @@ import os
 from decorators import singleton
 from requests import request, Response
 from params import Params
-
+from helpers import get_package_purl
 from typing import BinaryIO
 
 
@@ -25,6 +25,9 @@ class RequestFactory:
             }
 
     def create_url(self, params: Params, what: str) -> str:
+        if params.rl_portal_server == "trial":
+            return f"https://trial.secure.software/api/public/v1/{what}/"
+
         return f"https://my.secure.software/{params.rl_portal_server}/api/public/v1/{what}/"
 
     def post_scan_version_request(self, params: Params, file: BinaryIO) -> Response:
@@ -80,6 +83,24 @@ class RequestFactory:
         url = f"{url}{params.rl_portal_org}/{params.rl_portal_group}/{report_format}/{params.purl}"
 
         # https://docs.secure.software/api-reference/#tag/Version/operation/getVersionReport
+        return request(
+            "GET",
+            f"{url}",
+            headers=headers,
+            proxies=self.proxies,
+        )
+
+    def get_package_versions(self, params: Params) -> Response:
+        headers = {
+            "Authorization": f"Bearer {self.api_token}",
+        }
+
+        url = self.create_url(params, "list")
+
+        package_purl = get_package_purl(params.purl)
+        url = f"{url}{params.rl_portal_org}/{params.rl_portal_group}/{package_purl}"
+
+        # https://docs.secure.software/api-reference/#tag/Package/operation/listVersions
         return request(
             "GET",
             f"{url}",

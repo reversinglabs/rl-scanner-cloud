@@ -5,7 +5,13 @@ import argparse
 from params import Params
 from request_invoker import RequestInvoker
 from checks_fetcher import ChecksFetcher, DEFAULT_ATTEMPT_TIMEOUT_MIN
-from validators import validate_folder, validate_file, validate_purl, validate_report_formats
+from validators import (
+    validate_folder,
+    validate_file,
+    validate_purl,
+    validate_report_formats,
+    validate_force_and_replace,
+)
 from cimessages import Messages, MessageFormat
 from analysis_report_exporter import AnalysisReportExporter
 
@@ -111,7 +117,7 @@ def main() -> int:
     validate_file(params.file_path)
     validate_folder(params.report_path, params.report_format)
     validate_report_formats(params.report_format)
-
+    params = validate_force_and_replace(params)
     reporter = Messages.create(params.message_reporter)
 
     with reporter.progress_block("Scanning version"):
