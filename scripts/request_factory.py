@@ -28,6 +28,9 @@ class RequestFactory:
         if params.rl_portal_server == "trial":
             return f"https://trial.secure.software/api/public/v1/{what}/"
 
+        if params.rl_portal_server == "playground":
+            return f"https://playground.secure.software/api/public/v1/{what}/"
+
         return f"https://my.secure.software/{params.rl_portal_server}/api/public/v1/{what}/"
 
     def post_scan_version_request(self, params: Params, file: BinaryIO) -> Response:
