@@ -1,18 +1,16 @@
-from typing import (
-    TypedDict,
-    Optional,
-)
+from dataclasses import dataclass
+from typing import Optional
 
 from cimessages import MessageFormat
 
 
-class Params(TypedDict):
+@dataclass
+class Params:
     rl_portal_server: str
     rl_portal_org: str
     rl_portal_group: str
     purl: str
     file_path: str
-    report_path: str
     filename: str
     replace: Optional[bool]
     force: Optional[bool]
@@ -20,3 +18,5 @@ class Params(TypedDict):
     message_reporter: MessageFormat
     submit_only: Optional[bool]
     timeout: int
+    report_path: Optional[str]
+    report_format: Optional[str]

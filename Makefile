@@ -8,24 +8,30 @@ IMAGE_NAME		:= $(IMAGE_BASE):$(BUILD_VERSION)
 REPORT_DIR		:= reports
 
 LINE_LENGTH	:=	120
-DIST		:=	dist
 
 # testing parameters
 ARTIFACT_OK		:=	vim
 ARTIFACT_ERR	:=	eicarcom2.zip
-RL_PORTAL_SERVER:= guidedTour
-RL_PORTAL_ORG	:= ReversingLabs
-RL_PORTAL_GROUP	:= Demo
+
+RL_PORTAL_SERVER:= test
+RL_PORTAL_ORG	:= Test
+RL_PORTAL_GROUP	:= Default
+
 RL_PACKAGE_URL	:= pkg:rl/test-project/test-package@v0.0.1
 RL_PACKAGE_URL2	:= test-project/test-package@v0.0.1
+
 VOLUMES 		:= -v ./input:/input
+
 USER_GROUP		:= $(shell id -u):$(shell id -u )
 COMMON_DOCKER	:= -i --rm -u $(USER_GROUP) --env-file=../.envfile
+
+# -- replace --force , currently not supported: Error: Something went wrong while validating force and replace parameters
 TEST_PARAMS_SCAN:= --rl-portal-server $(RL_PORTAL_SERVER) \
 	--rl-portal-org $(RL_PORTAL_ORG) \
 	--rl-portal-group $(RL_PORTAL_GROUP) \
 	--purl $(RL_PACKAGE_URL2) \
-	--force --replace --timeout 20
+	--replace --timeout 20
+# {'error': 'Invalid token.'} if the token expired
 
 # the make rules
 
@@ -92,7 +98,6 @@ test_err_with_report:
 	ls -laR input >./tmp/list_in_out_err.txt
 
 clean:
-	rm -rf dist
 	-docker rmi $(IMAGE_NAME)
 	rm -rf input output tmp
 	rm -f eicarcom2.zip
@@ -103,17 +108,3 @@ format:
 
 pycheck:
 	-pylama --max-line-length $(LINE_LENGTH) -l "eradicate,mccabe,pycodestyle,pyflakes" scripts/
-
-dist: format pycheck
-	rm -rf $(DIST) && mkdir -p $(DIST) && mkdir -p $(DIST)/scripts
-	#copy release files
-	cp -a release/* $(DIST)/
-	# copy Python scripts
-	for src in scripts/*; do \
-		[ -f "$$src" ] && { \
-			echo "$$src"; \
-			sed "/# BEGIN DEVELOP/,/# END DEVELOP/d" "$$src" > "$(DIST)/$$src"; \
-		} \
-	done
-	$(MAKE) -C $(DIST) format
-	$(MAKE) -C $(DIST) pycheck
