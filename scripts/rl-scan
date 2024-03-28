@@ -64,7 +64,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
         description="ReversingLabs: rl-scanner-cloud\n\n"
         "Extended product documentation is available at: https://docs.secure.software",
         epilog="Environment variables:\n"
-        "  RLPORTAL_ACCESS_TOKEN    - Token used to access to the secure.software portal\n"
+        "  RLPORTAL_ACCESS_TOKEN    - Token used for access to the Portal\n"
         "  RLSECURE_PROXY_SERVER    - Server URL for local proxy\n"
         "  RLSECURE_PROXY_PORT      - Network port for local proxy\n"
         "  RLSECURE_PROXY_USER      - User name for proxy authentication\n"

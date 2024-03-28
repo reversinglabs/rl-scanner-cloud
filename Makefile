@@ -21,9 +21,8 @@ RL_PACKAGE_URL	:= pkg:rl/test-project/test-package@v0.0.1
 RL_PACKAGE_URL2	:= test-project/test-package@v0.0.1
 
 VOLUMES 		:= -v ./input:/input
-
 USER_GROUP		:= $(shell id -u):$(shell id -u )
-COMMON_DOCKER	:= -i --rm -u $(USER_GROUP) --env-file=../.envfile
+COMMON_DOCKER	:= -i --rm -u $(USER_GROUP) --env-file=$(HOME)/.envfile_rl-scanner-cloud.docker
 
 # -- replace --force , currently not supported: Error: Something went wrong while validating force and replace parameters
 TEST_PARAMS_SCAN:= --rl-portal-server $(RL_PORTAL_SERVER) \
