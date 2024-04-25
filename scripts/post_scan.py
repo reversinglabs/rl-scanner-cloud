@@ -23,21 +23,16 @@ def get_scan_status(portal: PortalAPI, timeout: int) -> str:
 
     number_of_attempts = (timeout * 60) // attempt_timeout_sec
 
-    while True:
-        if number_of_attempts == 0:
-            reporter.info("Preset timeout time expired")
-            return "fail"
-
+    while number_of_attempts > 0:
         reporter.info("Attempting to fetch analysis status")
+
         sleep(attempt_timeout_sec)
-
         response = portal.get_performed_checks()
-
         if response.status_code == 202:
             number_of_attempts -= 1
             continue
 
-        return (
+        return str(
             response.json()
             .get("analysis", {})
             .get("report", {})
@@ -46,14 +41,17 @@ def get_scan_status(portal: PortalAPI, timeout: int) -> str:
             .get("scan_status", "fail")
         )
 
+    reporter.info("Preset timeout time expired")
+    return "fail"
+
 
 def get_analysis_url(request_invoker: PortalAPI) -> str:
     response = request_invoker.get_analysis_status()
 
-    return response.json().get("analysis", {}).get("report", {}).get("info", {}).get("portal", {}).get("reference")
+    return str(response.json().get("analysis", {}).get("report", {}).get("info", {}).get("portal", {}).get("reference"))
 
 
-def export_analysis_report(portal: PortalAPI, report_formats: str, report_path: str):
+def export_analysis_report(portal: PortalAPI, report_formats: str, report_path: str) -> None:
     for report_format in parse_report_formats(report_formats):
         response = portal.export_analysis_report(report_format)
         reporter.info(f"Started {report_format} export")

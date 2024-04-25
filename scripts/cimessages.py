@@ -12,15 +12,15 @@ from typing import (
 
 
 class Reporter:
-    def __init__(self):
+    def __init__(self) -> None:
         self._underlying: Optional[Messages] = None
 
-    def set_format(self, msg_format: MessageFormat):
+    def set_format(self, msg_format: MessageFormat) -> None:
         self._underlying = Messages.create(msg_format.value)
 
-    def __getattr__(self, attr):
+    def __getattr__(self, attr: str) -> Any:
         if not self._underlying:
-            raise AttributeError("Set reporter format using `set_format` " "before calling `__getattr__`")
+            raise AttributeError("Set reporter format using `set_format` " + "before calling `__getattr__`")
 
         if attr in self.__dict__:
             return getattr(self, attr)
@@ -34,7 +34,7 @@ class MessageFormat(Enum):
     TEXT = "text"
     TEAMCITY = "teamcity"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.value
 
 
@@ -43,8 +43,7 @@ class Messages(abc.ABC):
     def create(cls, name: str) -> Any:
         if name == "teamcity":
             return TeamCityMessages()
-        else:
-            return TextMessages()
+        return TextMessages()
 
     @abc.abstractmethod
     def block_start(self, msg: str) -> None:
@@ -111,8 +110,7 @@ class TeamCityMessages(Messages):
         if isinstance(msg, dict):
             msg_content: List[str] = [f"{k}='{escape(v)}'" for k, v in msg.items()]
             return f"##teamcity[{name} {' '.join(msg_content)}]"
-        else:
-            return f"##teamcity[{name} '{escape(msg)}']"
+        return f"##teamcity[{name} '{escape(msg)}']"
 
     def block_start(self, msg: str) -> None:
         print(TeamCityMessages.service_message("progressStart", msg), flush=True)

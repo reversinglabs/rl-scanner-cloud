@@ -2,11 +2,11 @@
 import argparse
 import sys
 
-from cimessages import MessageFormat, reporter
-from helpers import get_portal_url
+from cimessages import (MessageFormat, reporter,)
+from helpers import (get_portal_url, RF,)
 from params import Params
 from portal_api import PortalAPI
-from post_scan import get_analysis_url, get_scan_status, export_analysis_report, DEFAULT_ATTEMPT_TIMEOUT_MIN
+from post_scan import ( get_analysis_url, get_scan_status, export_analysis_report, DEFAULT_ATTEMPT_TIMEOUT_MIN, )
 from validators import (
     validate_folder,
     validate_file,
@@ -71,6 +71,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "  RLSECURE_PROXY_PASSWORD  - Password for proxy authentication\n",
     )
 
+    supportedReports =", ".join(list(RF.keys())) + ", all"
+
     parser.add_argument(
         "--rl-portal-server",
         required=True,
@@ -117,6 +119,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "deleted to make space for the version you're uploading",
     )
 
+
     parser.add_argument(
         "--submit-only",
         action="store_true",
@@ -146,8 +149,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--report-format",
         type=str,
-        help="A comma-separated list of report formats to generate. Supported values: "
-        "cyclonedx, sarif, spdx, rl-json, rl-checks, all",
+        help="A comma-separated list of report formats to generate. Supported values: " +
+        f"{supportedReports}",
     )
 
     parser.add_argument(

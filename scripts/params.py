@@ -5,7 +5,7 @@ from cimessages import MessageFormat
 
 
 @dataclass
-class Params:
+class Params:  # pylint: disable=too-many-instance-attributes
     rl_portal_server: str
     rl_portal_org: str
     rl_portal_group: str
