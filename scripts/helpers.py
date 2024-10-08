@@ -7,6 +7,7 @@ RF = {  # https://docs.secure.software/api-reference/#tag/Version/operation/getV
     "rl-json": "report.rl.json",
     "rl-checks": "report.checks.json",
     "rl-cve": "report.cve.csv",
+    "rl-uri": "report.uri.csv",
 }
 
 

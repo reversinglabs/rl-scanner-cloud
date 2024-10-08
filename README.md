@@ -135,7 +135,7 @@ The `rl-scanner-cloud` image supports the following parameters.
 | `--timeout`          | No | This optional parameter lets you specify how long the container should wait for analysis to complete before exiting (in minutes). The parameter accepts any integer from 10 to 1440. The default timeout is 20 minutes. |
 | `--message-reporter` | No  | Optional parameter that changes the format of output messages (STDOUT) for easier integration with CI tools. Supported values: `text`, `teamcity` |
 | `--report-path`      | No  | Path to the location where you want to store analysis reports. The specified path must exist in the reports destination directory mounted to the container. |
-| `--report-format`    | No  | A comma-separated list of report formats to generate. Supported values: cyclonedx, sarif, spdx, rl-json, rl-checks, all |
+| `--report-format`    | No  | A comma-separated list of report formats to generate. Supported values: cyclonedx, sarif, spdx, rl-json, rl-checks, rl-cve, rl-uri, all                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 
 ## Return codes
@@ -194,7 +194,7 @@ In this example, we're adding the volume with `-v "$(pwd)/reports:/reports"`, so
 This destination directory must be created empty before starting the container.
 You will then specify it in the Docker command with the `--report-path` parameter.
 
-The `--report-format` parameter accepts any of the supported report formats (cyclonedx, sarif, spdx, rl-json, rl-checks).
+The `--report-format` parameter accepts any of the supported report formats (cyclonedx, sarif, spdx, rl-json, rl-checks, rl-cve, rl-uri).
 To request multiple formats at once, specify them as a comma-separated list.
 The special value `all` will download all supported report formats.
 
