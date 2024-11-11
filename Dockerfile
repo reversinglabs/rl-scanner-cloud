@@ -7,7 +7,8 @@ LABEL org.opencontainers.image.authors=secure.software@reversinglabs.com
 LABEL org.opencontainers.image.url=https://www.secure.software/
 LABEL org.opencontainers.image.vendor=ReversingLabs
 
-RUN microdnf install -y --nodocs python3-pip &&  \
+RUN microdnf upgrade -y && \
+    microdnf install -y --nodocs python3-pip &&  \
     pip3 install requests &&  \
     pip3 uninstall setuptools -y &&  \
     microdnf remove pip -y &&  \
