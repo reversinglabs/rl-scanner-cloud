@@ -1,9 +1,31 @@
+SHELL := /bin/bash
+
 ifdef DOCKER_TAG
     BUILD_VERSION	:= $(DOCKER_TAG)
 else
     BUILD_VERSION=latest
 endif
 
+# -----------------------------------------------------
+# venv stuff to pin a specific python version
+# note: pylama breaks on 3.12 if you dont install setuptools
+# rockylinux-9 has python 3.9.xx
+MIN_PYTHON_VERSION := python3.9
+export MIN_PYTHON_VERSION
+
+VENV := ./vtmp/
+export VENV
+
+PIP_INSTALL := pip3 -q \
+	--require-virtualenv \
+	--disable-pip-version-check \
+	--no-color install
+
+COMMON_VENV := rm -rf $(VENV); \
+	$(MIN_PYTHON_VERSION) -m venv $(VENV); \
+	source ./$(VENV)/bin/activate;
+
+# -----------------------------------------------------
 IMAGE_BASE	:= reversinglabs/rl-scanner-cloud
 IMAGE_NAME	:= $(IMAGE_BASE):$(BUILD_VERSION)
 
@@ -46,35 +68,55 @@ TEST_PARAMS_SCAN:= \
 	--purl $(RL_PACKAGE_URL2) \
 	--timeout 20 --replace --force
 
-all: prep build test
+MYPY_INSTALL := \
+	types-requests
 
-prep: clean format pycheck mypy
+# ======================================
+# Rules
+# ======================================
+
+all: prep build test $(DIST)
+
+# ==========================
+# Code format and verify
+# ==========================
+prep: clean black pylama mypy
 
 clean:
-	rm -rf reports tmp input output
+	rm -rf reports tmp input output $(VENV)
 	-docker rmi $(IMAGE_NAME)
 	rm -f $(ARTIFACT_ERR)
 	rm -rf .mypy_cache */.mypy_cache
 	mkdir -m 777 -p input output
+	docker image ls
 
-format: $(SCRIPTS)
+black:
+	$(COMMON_VENV) \
+	$(PIP_INSTALL) black; \
 	black \
 		--line-length $(LINE_LENGTH) \
 		$(SCRIPTS)
 
-pycheck: $(SCRIPTS)
+pylama:
+	$(COMMON_VENV) \
+	$(PIP_INSTALL) setuptools pylama; \
 	pylama \
 		--max-line-length $(LINE_LENGTH) \
-		--linters $(PL_LINTERS) \
-		--ignore $(PL_IGNORE) \
+		--linters "${PL_LINTERS}" \
+		--ignore "${PL_IGNORE}" \
 		$(SCRIPTS)
 
-mypy: $(SCRIPTS)
+mypy:
+	$(COMMON_VENV) \
+	$(PIP_INSTALL) mypy $(MYPY_INSTALL); \
 	mypy \
 		--strict \
 		--no-incremental \
 		$(SCRIPTS)
 
+# =============================
+# build of reversinglabs/rl-scanner-cloud
+# =============================
 build:
 	mkdir -p tmp
 	docker build -t $(IMAGE_NAME) -f Dockerfile .
@@ -82,12 +124,11 @@ build:
 	docker image inspect $(IMAGE_NAME) --format '{{ .Config.Labels }}'
 	docker image inspect $(IMAGE_NAME) --format '{{ .RepoTags }}'
 
-test: testFail test_err_all test_ok_all
+# ==========================
+# Testing
+# ==========================
 
-test_err_all: test_err test_err_with_report
-
-test_ok_all: test_ok  test_ok_with_report
-
+test: testFail test_err test_err_with_report test_ok test_ok_with_report
 
 ./input/$(ARTIFACT_ERR):
 	mkdir -m 777 -p input output

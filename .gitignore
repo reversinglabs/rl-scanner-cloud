@@ -162,3 +162,5 @@ eicarcom2.zip
 2
 .envfile
 reports/
+venv/
+vtmp/
