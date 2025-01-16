@@ -95,7 +95,7 @@ black:
 	$(PIP_INSTALL) black; \
 	black \
 		--line-length $(LINE_LENGTH) \
-		$(SCRIPTS)
+		$(SCRIPTS)/*
 
 pylama:
 	$(COMMON_VENV) \
@@ -104,7 +104,7 @@ pylama:
 		--max-line-length $(LINE_LENGTH) \
 		--linters "${PL_LINTERS}" \
 		--ignore "${PL_IGNORE}" \
-		$(SCRIPTS)
+		$(SCRIPTS)/*
 
 mypy:
 	$(COMMON_VENV) \
@@ -164,7 +164,7 @@ test_ok_with_report: ./input/$(ARTIFACT_OK)
 			$(TEST_PARAMS_SCAN) \
 			--file-path=/input/$(ARTIFACT_OK) \
 			--report-path /$(REPORT_DIR) \
-			--report-format all  2>&1 | tee tmp/$@.out
+			--pack-safe --report-format all  2>&1 | tee tmp/$@.out
 	ls -laR input >./tmp/list_in_out_ok.txt
 	ls -laR $(REPORT_DIR)
 
@@ -186,5 +186,5 @@ test_err_with_report: ./input/$(ARTIFACT_ERR)
 			$(TEST_PARAMS_SCAN) \
 			--file-path=/input/$(ARTIFACT_ERR) \
 			--report-path /$(REPORT_DIR) \
-			--report-format all  2>&1 | tee tmp/$@.out
+			--pack-safe --report-format all  2>&1 | tee tmp/$@.out
 	ls -laR input >./tmp/list_in_out_err.txt

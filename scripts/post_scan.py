@@ -1,13 +1,19 @@
 from time import sleep
-
+import requests
 from cimessages import reporter
-from helpers import get_default_report_name, parse_report_formats
+from helpers import (
+    get_default_report_name,
+    parse_report_formats,
+)
 from portal_api import PortalAPI
 
 DEFAULT_ATTEMPT_TIMEOUT_MIN = 20
 
 
-def get_scan_status(portal: PortalAPI, timeout: int) -> str:
+def get_scan_status(
+    portal: PortalAPI,
+    timeout: int,
+) -> str:
     attempt_timeout_sec = 30
     lower_attempt_timeout_min = 10
     upper_attempt_timeout_min = 1440  # 24h
@@ -45,20 +51,49 @@ def get_scan_status(portal: PortalAPI, timeout: int) -> str:
     return "fail"
 
 
-def get_analysis_url(request_invoker: PortalAPI) -> str:
+def get_analysis_url(
+    request_invoker: PortalAPI,
+) -> str:
     response = request_invoker.get_analysis_status()
 
-    return str(response.json().get("analysis", {}).get("report", {}).get("info", {}).get("portal", {}).get("reference"))
+    return str(
+        response.json().get("analysis", {}).get("report", {}).get("info", {}).get("portal", {}).get("reference"),
+    )
 
 
-def export_analysis_report(portal: PortalAPI, report_formats: str, report_path: str) -> None:
+def export_analysis_report(
+    portal: PortalAPI,
+    report_formats: str,
+    report_path: str,
+) -> None:
     for report_format in parse_report_formats(report_formats):
-        response = portal.export_analysis_report(report_format)
         reporter.info(f"Started {report_format} export")
 
         report_filename = get_default_report_name(report_format)
-
+        response = portal.export_analysis_report(report_format)
         with open(f"{report_path}/{report_filename}", "wb") as f:
             for chunk in response.iter_content(chunk_size=1024):
                 f.write(chunk)
-            reporter.info(f"Finished {report_format} export")
+
+        reporter.info(f"Finished {report_format} export")
+
+
+def export_pack_safe(
+    portal: PortalAPI,
+    report_path: str,
+) -> None:
+    chunk_size = 16 * 1024  # 10k
+
+    response = portal.export_pack_safe()
+    data = response.json()
+    report_filename = data.get("file_name")
+    download_url = data.get("download_link")
+
+    reporter.info("Started rl-safe export")
+
+    response = requests.get(download_url, stream=True)
+    with open(f"{report_path}/{report_filename}", mode="wb") as file:
+        for chunk in response.iter_content(chunk_size=chunk_size):
+            file.write(chunk)
+
+    reporter.info("Finished rl-safe export")

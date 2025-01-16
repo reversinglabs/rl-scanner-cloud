@@ -20,3 +20,4 @@ class Params:  # pylint: disable=too-many-instance-attributes
     timeout: int
     report_path: Optional[str]
     report_format: Optional[str]
+    pack_safe: bool = False

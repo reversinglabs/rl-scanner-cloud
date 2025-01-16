@@ -2,11 +2,23 @@
 import argparse
 import sys
 
-from cimessages import (MessageFormat, reporter,)
-from helpers import (get_portal_url, RF,)
+from cimessages import (
+    MessageFormat,
+    reporter,
+)
+from helpers import (
+    get_portal_url,
+    RF,
+)
 from params import Params
 from portal_api import PortalAPI
-from post_scan import ( get_analysis_url, get_scan_status, export_analysis_report, DEFAULT_ATTEMPT_TIMEOUT_MIN, )
+from post_scan import (
+    get_analysis_url,
+    get_scan_status,
+    export_analysis_report,
+    export_pack_safe,
+    DEFAULT_ATTEMPT_TIMEOUT_MIN,
+)
 from validators import (
     validate_folder,
     validate_file,
@@ -46,12 +58,23 @@ def main() -> int:
 
     if params.report_format and params.report_path:
         with reporter.progress_block("Exporting analysis report"):
-            export_analysis_report(scanner, params.report_format, params.report_path)
+            export_analysis_report(
+                scanner,
+                params.report_format,
+                params.report_path,
+            )
+
+    if params.pack_safe and params.report_path:
+        with reporter.progress_block("Exporting rl-safe archive"):
+            export_pack_safe(
+                scanner,
+                params.report_path,
+            )
 
     return 0 if passed_analysis else 1
 
 
-def validate_params(params: Params):
+def validate_params(params: Params) -> None:
     validate_file(params.file_path)
     validate_folder(params.report_path, params.report_format)
     validate_report_formats(params.report_format)
@@ -71,7 +94,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "  RLSECURE_PROXY_PASSWORD  - Password for proxy authentication\n",
     )
 
-    supportedReports =", ".join(list(RF.keys())) + ", all"
+    supportedReports = ", ".join(list(RF.keys())) + ", all"
 
     parser.add_argument(
         "--rl-portal-server",
@@ -119,7 +142,6 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "deleted to make space for the version you're uploading",
     )
 
-
     parser.add_argument(
         "--submit-only",
         action="store_true",
@@ -149,8 +171,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--report-format",
         type=str,
-        help="A comma-separated list of report formats to generate. Supported values: " +
-        f"{supportedReports}",
+        help="A comma-separated list of report formats to generate. Supported values: " + f"{supportedReports}",
     )
 
     parser.add_argument(
@@ -158,12 +179,20 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="Path to a directory where the selected reports will be saved",
     )
 
+    parser.add_argument(
+        "--pack-safe",
+        action="store_true",
+        help="Download a report.rl-safe archive into the report-path",
+    )
+
     return parser
 
 
 if __name__ == "__main__":
     try:
-        sys.exit(main())
+        sys.exit(
+            main(),
+        )
     except Exception as e:
         print(f"Error: {str(e)}")
         sys.exit(1)

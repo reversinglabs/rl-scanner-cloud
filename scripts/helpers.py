@@ -11,11 +11,15 @@ RF = {  # https://docs.secure.software/api-reference/#tag/Version/operation/getV
 }
 
 
-def get_package_purl(purl: str) -> str:
+def get_package_purl(
+    purl: str,
+) -> str:
     return purl.split("@")[0]
 
 
-def get_version(purl: str) -> str:
+def get_version(
+    purl: str,
+) -> str:
     at_index = purl.find("@")
     build_index = purl.find("?")
 
@@ -24,7 +28,9 @@ def get_version(purl: str) -> str:
     return purl[at_index + 1 :]
 
 
-def has_repro(purl: str) -> bool:
+def has_repro(
+    purl: str,
+) -> bool:
     build_index = purl.find("?")
 
     if build_index == -1:
@@ -32,7 +38,9 @@ def has_repro(purl: str) -> bool:
     return purl[build_index + 1 :] == "build=repro"
 
 
-def get_portal_url(rl_portal_server: str) -> str:
+def get_portal_url(
+    rl_portal_server: str,
+) -> str:
     if rl_portal_server == "trial":
         return "https://trial.secure.software"
 
@@ -42,12 +50,17 @@ def get_portal_url(rl_portal_server: str) -> str:
     return f"https://my.secure.software/{rl_portal_server}"
 
 
-def create_public_api_url(rl_portal_server: str, what: str) -> str:
+def create_public_api_url(
+    rl_portal_server: str,
+    what: str,
+) -> str:
     url = get_portal_url(rl_portal_server)
     return f"{url}/api/public/v1/{what}/"
 
 
-def parse_report_formats(report_formats_csv: str) -> List[str]:
+def parse_report_formats(
+    report_formats_csv: str,
+) -> List[str]:
     parsed_report_formats = report_formats_csv.split(",")
 
     if "all" in parsed_report_formats:
@@ -63,7 +76,9 @@ def parse_report_formats(report_formats_csv: str) -> List[str]:
     return parsed_report_formats
 
 
-def get_default_report_name(report_format: str) -> str:
+def get_default_report_name(
+    report_format: str,
+) -> str:
     # https://docs.secure.software/api-reference/#tag/Version/operation/getVersionReport
     if report_format in RF:
         return str(RF.get(report_format))

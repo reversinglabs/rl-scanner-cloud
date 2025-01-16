@@ -39,11 +39,12 @@ The following table lists more detailed differences between these two Docker ima
 
 |             | **rl-scanner** | **rl-scanner-cloud** |
 |:----        | ----           | ----             |
-| **Endpoint access** | Connects to `api.reversinglabs.com` and `data.reversinglabs.com` | Connects to a user-specified Spectra Assure Portal instance (`my.secure.software/{server}/api`) |
+| **Endpoint access** | Connects to `api.reversinglabs.com` and `data.reversinglabs.com` | Connects to a user-specified Portal instance (`my.secure.software/{server}/api`) |
 | **Scanning** | Software packages are scanned inside the Docker container, on the local system where the container is running. | Software packages are scanned in the cloud, on the Portal instance to which they are uploaded. |
+| **Password management** | Users can provide passwords or (Base64-encoded) password list files to allow decrypting password-protected archives during the scan and getting complete analysis reports. | Not supported at this time. The analysis reports will indicate that the file content is protected by an unknown password. |
 | **Policy controls** | If a permanent package store is used with the Docker image, users can modify policies through local configuration files. | Any existing policy configuration for the user's organization and group on the Portal automatically applies. |
-| **Reports**  | Users can choose the report format(s) they want to generate, and automatically save the reports to local storage or as pipeline artifacts. | Users can choose the report format(s) they want to generate and save them to local storage or as pipeline artifacts. The HTML report (rl-html format) is always generated, but it's accessible only in the Portal web interface. By default, the direct link to the HTML report on a Portal instance is included in the Docker command output. |
-| **Accounts and licensing** | A valid `rl-secure` license with site key is required to use the Docker image. The size of analyzed files is deducted from the quota allocated to the user's `rl-secure` account. | An active Spectra Assure Portal account with a Personal Access Token is required to use the Docker image. The size of analyzed files is deducted from the analysis capacity allocated to the user's group and reserved for projects. |
+| **Reports**  | Users can choose the report format(s) they want to generate, and automatically save the reports to local storage or as pipeline artifacts. | Users can choose the report format(s) they want to generate and save them to local storage or as pipeline artifacts. The [SAFE report](https://docs.secure.software/safe/report/) (rl-html format) is always generated, but it's accessible only in the Portal web interface. By default, the direct link to the [SAFE report](https://docs.secure.software/safe/report/) on a Portal instance is included in the Docker command output. |
+| **Accounts and licensing** | A valid `rl-secure` license with site key is required to use the Docker image. The size of analyzed files is deducted from the monthly analysis capacity tied to the user's `rl-secure` account. | An active Portal account with a Personal Access Token is required to use the Docker image. The size of analyzed files is deducted from the monthly limit configured for the user's group and designated for projects. |
 
 
 # Quick reference
@@ -66,8 +67,8 @@ The following table lists more detailed differences between these two Docker ima
 
 Unversioned Docker image will have the tag `reversinglabs/rl-scanner-cloud:latest`. This tag will always point to the latest published image.
 
-Versioned tags will be structured as `reversinglabs/rl-scanner-cloud:X`, where X is an incrementing version number. 
-We will increment the major version number to signify a breaking change. 
+Versioned tags will be structured as `reversinglabs/rl-scanner-cloud:X`, where X is an incrementing version number.
+We will increment the major version number to signify a breaking change.
 If changes to the image are such that no existing functionality will be broken (small bug fixes or new helper tools), we will not increment the version number.
 
 This makes it easier for cautious customers to use versioned tag images and migrate to a new version at their own convenience.
@@ -135,7 +136,8 @@ The `rl-scanner-cloud` image supports the following parameters.
 | `--timeout`          | No | This optional parameter lets you specify how long the container should wait for analysis to complete before exiting (in minutes). The parameter accepts any integer from 10 to 1440. The default timeout is 20 minutes. |
 | `--message-reporter` | No  | Optional parameter that changes the format of output messages (STDOUT) for easier integration with CI tools. Supported values: `text`, `teamcity` |
 | `--report-path`      | No  | Path to the location where you want to store analysis reports. The specified path must exist in the reports destination directory mounted to the container. |
-| `--report-format`    | No  | A comma-separated list of report formats to generate. Supported values: cyclonedx, sarif, spdx, rl-json, rl-checks, rl-cve, rl-uri, all                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `--report-format`    | No  | A comma-separated list of [report formats](https://docs.secure.software/concepts/analysis-reports) to generate. Supported values: cyclonedx, sarif, spdx, rl-json, rl-checks, rl-cve, rl-uri, all |
+| `--pack-safe`    | No  | When this parameter is used, the RL-SAFE archive is automatically downloaded together with other specified report formats. The [RL-SAFE archive](https://docs.secure.software/concepts/analysis-reports#rl-safe-archive) is a convenient way to get the full SAFE report and all other supported report formats for a software package in a single file. The archive can be freely shared and moved between different computers, and viewed without requiring a Spectra Assure product license. To open the archive and work with it, you need [the SAFE Viewer](https://docs.secure.software/safe-viewer) - a free, cross-platform tool developed by ReversingLabs. By default, the RL-SAFE archive is named `report.rl-safe` and stored in `--report-path` (required). |
 
 
 ## Return codes
@@ -160,7 +162,7 @@ You may also encounter any of the [standard chroot exit codes](https://docs.dock
 
 3. Start the container with the input directory mounted as a volume and your Personal Access Token provided as an environment variable.
 
-The following command runs the container and uploads a file to the specified Spectra Assure Portal instance for analysis. 
+The following command runs the container and uploads a file to the specified Spectra Assure Portal instance for analysis.
 In our example, the portal URL is `my.secure.software/demo`, so the instance name is `demo`.
 
 The file is added to the specified organization and group, and assigned as a version to the project and package specified in the PURL.
@@ -190,7 +192,7 @@ To download analysis reports, you can use the `--report-path` and `--report-form
 These parameters are optional, but they must be used together.
 
 To store the reports to a specific location, you must use an additional volume and make sure Docker can write to it.
-In this example, we're adding the volume with `-v "$(pwd)/reports:/reports"`, so the destination directory is going to be called `reports`. 
+In this example, we're adding the volume with `-v "$(pwd)/reports:/reports"`, so the destination directory is going to be called `reports`.
 This destination directory must be created empty before starting the container.
 You will then specify it in the Docker command with the `--report-path` parameter.
 
@@ -215,7 +217,7 @@ Other configuration parameters are the same in this example as in the other exam
         --purl my-project/my-package@1.0 \
         --file-path /packages/demo-packages/MyPackage_1.exe \
         --report-path /reports \
-        --report-format all 
+        --report-format all
 
 
 ### Compare package versions in a Portal project
@@ -270,7 +272,7 @@ Other configuration parameters are the same in this example as in the other exam
         --rl-portal-org ExampleOrg \
         --rl-portal-group demo-group \
         --purl my-project/my-package@1.0?build=repro \
-        --file-path /packages/demo-packages/MyPackage_1-build1.exe 
+        --file-path /packages/demo-packages/MyPackage_1-build1.exe
 
 
 The analysis report will contain the **Reproducibility** tab with the reproducibility check status and a summary of differences between the reproducible build artifact and the main artifact ("Reference Version" in the report).
