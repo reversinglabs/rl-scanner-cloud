@@ -86,7 +86,9 @@ To use the provided Portal functionality, an active account on a Portal instance
 Before you start using the image, make sure all [prerequisites](#prerequisites) are satisfied.
 
 Access to input data (files you want to scan) and the reports destination directory (to optionally save analysis reports) is provided by using [Docker volume mounts](https://docs.docker.com/storage/volumes/).
+
 To prevent issues with file ownership and access, the `-u` option is used to provide current user identification to the container.
+The line `-u $(id -u):$(id -g)` can be removed for platforms where docker runs as the current user like on Windows.
 
 When the container starts, it will try to connect to a Spectra Assure Portal instance.
 Depending on your network settings, it may be required to access the internet through a proxy server.
