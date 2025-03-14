@@ -7,16 +7,25 @@ from helpers import (
 )
 from portal_api import PortalAPI
 
-DEFAULT_ATTEMPT_TIMEOUT_MIN = 20
+from constants import (
+    _DEV,
+    LOWER_ATTEMPT_TIMEOUT_MIN,
+    UPPER_ATTEMPT_TIMEOUT_MIN,
+    DEFAULT_ATTEMPT_TIMEOUT_MIN,
+    ATTEMPT_TIMEOUT_SEC,
+    DOWNLOAD_CHUNK_SIZE,
+)
 
 
 def get_scan_status(
     portal: PortalAPI,
     timeout: int,
+    lower_attempt_timeout_min: int = LOWER_ATTEMPT_TIMEOUT_MIN,
+    upper_attempt_timeout_min: int = UPPER_ATTEMPT_TIMEOUT_MIN,
+    attempt_timeout_sec: int = ATTEMPT_TIMEOUT_SEC,
 ) -> str:
-    attempt_timeout_sec = 30
-    lower_attempt_timeout_min = 10
-    upper_attempt_timeout_min = 1440  # 24h
+    if _DEV:
+        lower_attempt_timeout_min = 1
 
     if timeout not in range(lower_attempt_timeout_min, upper_attempt_timeout_min):
         timeout = DEFAULT_ATTEMPT_TIMEOUT_MIN
@@ -47,8 +56,9 @@ def get_scan_status(
             .get("scan_status", "fail")
         )
 
-    reporter.info("Preset timeout time expired")
-    return "fail"
+    msg = "Preset timeout time expired"
+    reporter.info(msg)
+    raise RuntimeError(msg)
 
 
 def get_analysis_url(
@@ -57,7 +67,24 @@ def get_analysis_url(
     response = request_invoker.get_analysis_status()
 
     return str(
-        response.json().get("analysis", {}).get("report", {}).get("info", {}).get("portal", {}).get("reference"),
+        response.json()
+        .get(
+            "analysis",
+            {},
+        )
+        .get(
+            "report",
+            {},
+        )
+        .get(
+            "info",
+            {},
+        )
+        .get(
+            "portal",
+            {},
+        )
+        .get("reference"),
     )
 
 
@@ -81,9 +108,8 @@ def export_analysis_report(
 def export_pack_safe(
     portal: PortalAPI,
     report_path: str,
+    chunk_size: int = DOWNLOAD_CHUNK_SIZE,
 ) -> None:
-    chunk_size = 16 * 1024  # 10k
-
     response = portal.export_pack_safe()
     data = response.json()
     report_filename = data.get("file_name")

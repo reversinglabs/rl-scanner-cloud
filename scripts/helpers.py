@@ -1,15 +1,12 @@
-from typing import List
+from typing import (
+    List,
+    Optional,
+)
 
-RF = {  # https://docs.secure.software/api-reference/#tag/Version/operation/getVersionReport
-    "sarif": "report.sarif.json",
-    "cyclonedx": "report.cyclonedx.json",
-    "spdx": "report.spdx.json",
-    "rl-json": "report.rl.json",
-    "rl-checks": "report.checks.json",
-    "rl-cve": "report.cve.csv",
-    "rl-uri": "report.uri.csv",
-    "rl-summary-pdf": "report.summary.pdf",
-}
+from constants import (
+    REPORT_FORMATS,
+    DEFAULT_DOMAIN,
+)
 
 
 def get_package_purl(
@@ -39,24 +36,61 @@ def has_repro(
     return purl[build_index + 1 :] == "build=repro"
 
 
-def get_portal_url(
-    rl_portal_server: str,
+def _make_base_url(
+    *,
+    rl_portal_host: Optional[str] = None,
+    rl_portal_server: Optional[str] = None,
+    domain: str = DEFAULT_DOMAIN,
+    proto: str = "https",
 ) -> str:
-    if rl_portal_server == "trial":
-        return "https://trial.secure.software"
+    # dont add the api tail, the report url is not part of the api
+    if rl_portal_server in ["playground", "trial"]:  # special cases only on the default domain
+        return f"{proto}://{rl_portal_server}.{domain}"
 
-    if rl_portal_server == "playground":
-        return "https://playground.secure.software"
+    if rl_portal_host:
+        assert len(rl_portal_host) > 0
 
-    return f"https://my.secure.software/{rl_portal_server}"
+        if rl_portal_server:
+            assert len(rl_portal_server) > 0
+            return f"{proto}://{rl_portal_host}/{rl_portal_server}"  # both host and server(tenanat)
+
+        return f"{proto}://{rl_portal_host}"  # only host, no server(tenant)
+
+    assert rl_portal_server
+    assert len(rl_portal_server) > 0
+
+    return f"{proto}://my.{domain}/{rl_portal_server}"  # now we must have a server (tenant)
+
+
+def get_portal_url(
+    *,
+    rl_portal_server: Optional[str] = None,
+    rl_portal_host: Optional[str] = None,
+    domain: str = DEFAULT_DOMAIN,
+    proto: str = "https",
+) -> str:
+    return _make_base_url(
+        rl_portal_server=rl_portal_server,
+        rl_portal_host=rl_portal_host,
+        domain=domain,
+        proto=proto,
+    )
 
 
 def create_public_api_url(
-    rl_portal_server: str,
+    *,
     what: str,
+    rl_portal_host: Optional[str] = None,
+    rl_portal_server: Optional[str] = None,
+    version: str = "v1",
 ) -> str:
-    url = get_portal_url(rl_portal_server)
-    return f"{url}/api/public/v1/{what}/"
+    base_url = get_portal_url(
+        rl_portal_host=rl_portal_host,
+        rl_portal_server=rl_portal_server,
+    )
+    tail = f"api/public/{version}"
+
+    return f"{base_url}/{tail}/{what}/"
 
 
 def parse_report_formats(
@@ -65,14 +99,16 @@ def parse_report_formats(
     parsed_report_formats = report_formats_csv.split(",")
 
     if "all" in parsed_report_formats:
-        return list(RF.keys())
+        return list(REPORT_FORMATS.keys())
 
     # verify that the requested report is supported
     for maybe_report_format in parsed_report_formats:
-        if maybe_report_format not in RF:
-            raise RuntimeError(
-                f"ERROR: Invalid report format provided: {maybe_report_format}, we currently suppport: {RF.keys()}."
+        if maybe_report_format not in REPORT_FORMATS:
+            msg = (
+                "ERROR: Invalid report format provided: "
+                + f"{maybe_report_format}, we currently suppport: {REPORT_FORMATS.keys()}."
             )
+            raise RuntimeError(msg)
 
     return parsed_report_formats
 
@@ -81,7 +117,7 @@ def get_default_report_name(
     report_format: str,
 ) -> str:
     # https://docs.secure.software/api-reference/#tag/Version/operation/getVersionReport
-    if report_format in RF:
-        return str(RF.get(report_format))
+    if report_format in REPORT_FORMATS:
+        return str(REPORT_FORMATS.get(report_format))
 
     assert False  # to get rid of mypy no return code

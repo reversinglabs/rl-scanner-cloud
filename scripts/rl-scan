@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import sys
+import traceback
 
 from cimessages import (
     MessageFormat,
@@ -8,7 +9,6 @@ from cimessages import (
 )
 from helpers import (
     get_portal_url,
-    RF,
 )
 from params import Params
 from portal_api import PortalAPI
@@ -17,70 +17,18 @@ from post_scan import (
     get_scan_status,
     export_analysis_report,
     export_pack_safe,
-    DEFAULT_ATTEMPT_TIMEOUT_MIN,
 )
 from validators import (
-    validate_folder,
-    validate_file,
-    validate_report_formats,
+    validate_params,
+)
+from constants import (
+    DEFAULT_ATTEMPT_TIMEOUT_MIN,
+    REPORT_FORMATS,
+    EXIT_FATAL,
 )
 
 
-def main() -> int:
-    parser: argparse.ArgumentParser = build_argument_parser()
-
-    params = Params(**vars(parser.parse_args()))
-    validate_params(params)
-
-    reporter.set_format(params.message_reporter)
-
-    scanner = PortalAPI(params)
-
-    with reporter.progress_block("Scanning version"):
-        with open(params.file_path, "rb") as file:
-            scanner.scan_version(file)
-
-            if params.submit_only:
-                reporter.info("submit-only flag present, skip waiting for analysis result")
-                reporter.scan_result(True)
-                return 0
-
-    with reporter.progress_block("Fetching analysis status"):
-        scan_status = get_scan_status(scanner, params.timeout)
-        passed_analysis = scan_status == "pass"
-        reporter.scan_result(passed_analysis)
-
-    with reporter.progress_block("Getting the report URL"):
-        analysis_url = get_analysis_url(scanner)
-        portal_url = get_portal_url(params.rl_portal_server)
-        report_url = f"{portal_url}/{analysis_url}"
-        reporter.with_prefix("Report URL", report_url)
-
-    if params.report_format and params.report_path:
-        with reporter.progress_block("Exporting analysis report"):
-            export_analysis_report(
-                scanner,
-                params.report_format,
-                params.report_path,
-            )
-
-    if params.pack_safe and params.report_path:
-        with reporter.progress_block("Exporting rl-safe archive"):
-            export_pack_safe(
-                scanner,
-                params.report_path,
-            )
-
-    return 0 if passed_analysis else 1
-
-
-def validate_params(params: Params) -> None:
-    validate_file(params.file_path)
-    validate_folder(params.report_path, params.report_format)
-    validate_report_formats(params.report_format)
-
-
-def build_argument_parser() -> argparse.ArgumentParser:
+def _build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
         prog="rl-scan",
@@ -94,12 +42,18 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "  RLSECURE_PROXY_PASSWORD  - Password for proxy authentication\n",
     )
 
-    supportedReports = ", ".join(list(RF.keys())) + ", all"
+    supportedReports = ", ".join(list(REPORT_FORMATS.keys())) + ", all"
+
+    parser.add_argument(
+        "--rl-portal-host",
+        help="Portal Host that will do the scanning",
+        required=False,
+    )
 
     parser.add_argument(
         "--rl-portal-server",
-        required=True,
-        help="Portal that will do the scanning",
+        help="Portal tenant that will do the scanning",
+        required=False,
     )
 
     parser.add_argument(
@@ -140,6 +94,12 @@ def build_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="If a package has the maximum number of versions, then the oldest version of the package will be "
         "deleted to make space for the version you're uploading",
+    )
+
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="add additional verbosity during execution",
     )
 
     parser.add_argument(
@@ -188,11 +148,68 @@ def build_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def main() -> int:
+    parser: argparse.ArgumentParser = _build_argument_parser()
+    params = Params(**vars(parser.parse_args()))
+    validate_params(params)
+    if params.debug:
+        print(params, file=sys.stderr)
+
+    reporter.set_format(params.message_reporter)
+    scanner = PortalAPI(params)
+
+    with reporter.progress_block("Scanning version"):
+        with open(params.file_path, "rb") as file:
+            scanner.scan_version(file)
+            if params.submit_only:
+                reporter.info("submit-only flag present, skip waiting for analysis result")
+                reporter.show_scan_result(None)
+                return 0
+
+    with reporter.progress_block("Fetching analysis status"):
+        scan_status = get_scan_status(scanner, params.timeout)
+        passed_analysis = scan_status == "pass"
+        reporter.show_scan_result(passed_analysis)
+
+    with reporter.progress_block("Getting the report URL"):
+        analysis_url = get_analysis_url(scanner)
+        portal_url = get_portal_url(
+            rl_portal_host=params.rl_portal_host,
+            rl_portal_server=params.rl_portal_server,
+        )
+        report_url = f"{portal_url}/{analysis_url}"
+        reporter.with_prefix("Report URL", report_url)
+
+    if params.report_format and params.report_path:
+        with reporter.progress_block("Exporting analysis report"):
+            export_analysis_report(
+                scanner,
+                params.report_format,
+                params.report_path,
+            )
+
+    if params.pack_safe and params.report_path:
+        with reporter.progress_block("Exporting rl-safe archive"):
+            export_pack_safe(
+                scanner,
+                params.report_path,
+            )
+
+    return 0 if passed_analysis else 1
+
+
 if __name__ == "__main__":
     try:
         sys.exit(
             main(),
         )
     except Exception as e:
-        print(f"Error: {str(e)}")
-        sys.exit(1)
+        print(f"Error: rl_scan: {str(e)}")
+
+        try:
+            raise TypeError("Again !?!")
+        except:
+            pass
+
+        traceback.print_tb(e.__traceback__)
+        sys.exit(EXIT_FATAL)

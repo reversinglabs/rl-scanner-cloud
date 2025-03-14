@@ -8,11 +8,12 @@ from urllib.parse import (
     parse_qs,
 )
 from helpers import parse_report_formats
+from params import Params
 
-UPLOAD_FILE_SIZE_LIMIT = 10 * 1024 * 1024 * 1024  # 10GB
+from constants import UPLOAD_FILE_SIZE_LIMIT
 
 
-def validate_file(
+def _validate_file(
     file_path: str,
 ) -> None:
     if not os.path.exists(file_path):
@@ -22,15 +23,7 @@ def validate_file(
         raise RuntimeError("File size is larger than 10GB")
 
 
-def validate_purl(
-    purl: str,
-) -> None:
-    query = parse_qs(urlsplit(purl).query)
-    if "build" in query and not ("version" in query["build"] or "repro" in query["build"]):
-        raise RuntimeError("Wrong build type set, has to be either version or repro")
-
-
-def validate_folder(
+def _validate_folder(
     report_path: Optional[str],
     report_format: Optional[str],
 ) -> None:
@@ -50,10 +43,25 @@ def validate_folder(
         raise RuntimeError("--report-path needs to point to an empty directory!")
 
 
-def validate_report_formats(
+def _validate_report_formats(
     report_format: Optional[str],
 ) -> List[str]:
     if not report_format:
         return []
 
     return parse_report_formats(report_format)
+
+
+def validate_purl(
+    purl: str,
+) -> None:
+    # seems not used
+    query = parse_qs(urlsplit(purl).query)
+    if "build" in query and not ("version" in query["build"] or "repro" in query["build"]):
+        raise RuntimeError("Wrong build type set, has to be either version or repro")
+
+
+def validate_params(params: Params) -> None:
+    _validate_file(params.file_path)
+    _validate_folder(params.report_path, params.report_format)
+    _validate_report_formats(params.report_format)

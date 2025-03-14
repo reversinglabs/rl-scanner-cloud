@@ -38,7 +38,7 @@ In short:
 The following table lists more detailed differences between these two Docker images that should help you choose the most appropriate image for your use-case.
 
 |             | **rl-scanner** | **rl-scanner-cloud** |
-|:----        | ----           | ----             |
+| ----        | ----           | ----             |
 | **Endpoint access** | Connects to `api.reversinglabs.com` and `data.reversinglabs.com` | Connects to a user-specified Portal instance (`my.secure.software/{server}/api`) |
 | **Scanning** | Software packages are scanned inside the Docker container, on the local system where the container is running. | Software packages are scanned in the cloud, on the Portal instance to which they are uploaded. |
 | **Password management** | Users can provide passwords or (Base64-encoded) password list files to allow decrypting password-protected archives during the scan and getting complete analysis reports. | Not supported at this time. The analysis reports will indicate that the file content is protected by an unknown password. |
@@ -88,7 +88,7 @@ Before you start using the image, make sure all [prerequisites](#prerequisites) 
 Access to input data (files you want to scan) and the reports destination directory (to optionally save analysis reports) is provided by using [Docker volume mounts](https://docs.docker.com/storage/volumes/).
 
 To prevent issues with file ownership and access, the `-u` option is used to provide current user identification to the container.
-The line `-u $(id -u):$(id -g)` can be removed for platforms where docker runs as the current user like on Windows.
+The line `-u $(id -u):$(id -g) \` can be removed for platforms where docker runs as the current user like on Windows.
 
 When the container starts, it will try to connect to a Spectra Assure Portal instance.
 Depending on your network settings, it may be required to access the internet through a proxy server.
@@ -111,7 +111,7 @@ To successfully use this Docker image, you need:
 The following environment variables can be used with this image.
 
 | Environment variable    | Required | Description |
-| :---------              | :--- | :--- |
+| ---------              | --- | --- |
 | `RLPORTAL_ACCESS_TOKEN` | **Yes** | A Personal Access Token for authenticating requests to the Spectra Assure Portal. Before you can use this Docker image, you must [create the token](https://docs.secure.software/api/generate-api-token) in your Portal settings. Tokens can expire and be revoked, in which case you'll have to update the value of this environment variable. It's strongly recommended to treat this token as a secret and manage it according to your organization's security best practices. |
 | `RLSECURE_PROXY_SERVER` | No | Server name for proxy configuration (IP address or DNS name). |
 | `RLSECURE_PROXY_PORT`   | No | Network port on the proxy server for proxy configuration. Required if `RLSECURE_PROXY_SERVER` is used. |
@@ -123,9 +123,10 @@ The following environment variables can be used with this image.
 
 The `rl-scanner-cloud` image supports the following parameters.
 
-| Parameter            | Required | Description     |
-|:-------------------- |:--- | :---- |
-| `--rl-portal-server` | **Yes** | Name of the Spectra Assure Portal instance to use for the scan. The Portal instance name usually matches the subdirectory of `my.secure.software` in your Portal URL. For example, if your portal URL is `my.secure.software/demo`, the instance name to use with this parameter is `demo`. |
+| Parameter            | Required | Description |
+| -------------------- | ---      | ----        |
+| `--rl-portal-host`   | No | Name of the Spectra Assure Portal host to use for the scan. Default: `my.secure.software`. <br>Typically, there is no need to specify this unless you have a dedicated host for your company, in which case you don't need to specify the `--rl-portal-server` parameter. |
+| `--rl-portal-server` | No | Name of the Spectra Assure Portal instance (tenant) to use for the scan. <br>The Portal instance name usually matches the subdirectory of `my.secure.software` in your Portal URL. For example, if your portal URL is `my.secure.software/demo`, the instance name to use with this parameter is `demo`. |
 | `--rl-portal-org`    | **Yes** | Name of the Spectra Assure Portal organization to use for the scan. The organization must exist on the Portal instance specified with `--rl-portal-server`. The user account authenticated with the token must be a member of the specified organization and have the appropriate permissions to upload and scan a file. Organization names are case-sensitive. |
 | `--rl-portal-group`  | **Yes** | Name of the Spectra Assure Portal group to use for the scan. The group must exist in the Portal organization specified with `--rl-portal-org`. Group names are case-sensitive. |
 | `--purl`             | **Yes** | The package URL (purl) used to associate the file with a project and package on the Portal. Package URLs are unique identifiers in the format `[pkg:type/]<project></package><@version>`. When scanning a file, you must assign a package URL to it, so that it can be placed into the specified project and package as a version. If the project and package you specified don't exist in the Portal, they will be automatically created. The `pkg:type/` part of the package URL can be freely omitted, because the default value `pkg:rl/` is always automatically added. To analyze a reproducible build artifact of a package version, you must append the `?build=repro` parameter to the package URL of the artifact when scanning it, in the format `<project></package><@version?build=repro>`. |
@@ -134,11 +135,11 @@ The `rl-scanner-cloud` image supports the following parameters.
 | `--replace`          | No  | Replace (overwrite) an already existing package version with the file you're uploading. |
 | `--force`            | No  | In Spectra Assure Portal, a package can only have a limited amount of versions. If a package already has the maximum number of versions, you can use this optional parameter to delete the oldest version of the package and make space for the version you're uploading. |
 | `--diff-with`        | No  | This optional parameter lets you specify a previous package version against which you want to compare (diff) the version you're uploading. The specified version must exist in the package. This parameter is ignored when analyzing reproducible build artifacts. |
-| `--submit-only`      | No | By default, the Docker container runs until the uploaded file is analyzed on the Portal and returns the result in the output. This optional parameter lets you skip waiting for the analysis result. When this parameter is used, the analysis report URL is not displayed in the output. |
+| `--submit-only`      | No | With this optional parameter, you skip waiting for the analysis result. When this parameter is used, the analysis report URL is not displayed in the output. The text `Scan status: NONE` will be displayed as there is no scan result. |
 | `--timeout`          | No | This optional parameter lets you specify how long the container should wait for analysis to complete before exiting (in minutes). The parameter accepts any integer from 10 to 1440. The default timeout is 20 minutes. |
-| `--message-reporter` | No  | Optional parameter that changes the format of output messages (STDOUT) for easier integration with CI tools. Supported values: `text`, `teamcity` |
+| `--message-reporter` | No  | Optional parameter that changes the format of output messages (STDOUT) for easier integration with CI tools. Supported values: `text`, `teamcity`. |
 | `--report-path`      | No  | Path to the location where you want to store analysis reports. The specified path must exist in the reports destination directory mounted to the container. |
-| `--report-format`    | No  | A comma-separated list of [report formats](https://docs.secure.software/concepts/analysis-reports) to generate. Supported values: cyclonedx, sarif, spdx, rl-json, rl-checks, rl-cve, rl-uri, rl-summary-pdf, all |
+| `--report-format`    | No  | A comma-separated list of [report formats](https://docs.secure.software/concepts/analysis-reports) to generate. Supported values: cyclonedx, sarif, spdx, rl-json, rl-checks, rl-cve, rl-uri, rl-summary-pdf, all. |
 | `--pack-safe`    | No  | When this parameter is used, the RL-SAFE archive is automatically downloaded together with other specified report formats. The [RL-SAFE archive](https://docs.secure.software/concepts/analysis-reports#rl-safe-archive) is a convenient way to get the full SAFE report and all other supported report formats for a software package in a single file. The archive can be freely shared and moved between different computers, and viewed without requiring a Spectra Assure product license. To open the archive and work with it, you need [the SAFE Viewer](https://docs.secure.software/safe-viewer) - a free, cross-platform tool developed by ReversingLabs. By default, the RL-SAFE archive is named `report.rl-safe` and stored in `--report-path` (required). |
 
 
@@ -147,9 +148,12 @@ The `rl-scanner-cloud` image supports the following parameters.
 The Docker container can exit with the following return codes.
 
 | Code | Description |
-| :----: | ------ |
-| **0** | Returned when: <br /> - The file is successfully analyzed on the Portal with CI status `PASS` <br/> - The `--submit-only` parameter is used |
-| **1** | Returned when: <br /> - The file is successfully analyzed on the Portal with CI status `FAIL` <br /> - The default or user-configured timeout expired <br/> - There is a problem with file scanning on the Portal |
+| ---- | ------ |
+| **0** | Returned when: <br> - The file is successfully analyzed on the Portal with CI status `PASS`. <br> - The `--submit-only` parameter is used. That parameter now outputs: `Scan result: NONE`. |
+| **1** | Returned when: <br> - The file is successfully analyzed on the Portal with CI status `FAIL`. |
+| **2** | Returned when parsing the mandatory parameters fails. |
+| **101** | Returned when: <br> - The default or user-configured timeout expired. <br> - There is a problem with file scanning on the Portal. <br> - The wrong entrypoint command is specified. |
+
 
 You may also encounter any of the [standard chroot exit codes](https://docs.docker.com/engine/reference/run/#exit-status) in case of Docker-specific problems.
 

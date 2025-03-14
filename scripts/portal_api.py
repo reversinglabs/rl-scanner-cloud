@@ -18,14 +18,18 @@ from helpers import (
 )
 from params import Params
 
-REQUEST_TIMEOUT = 600  # 10 minutes
+from constants import (
+    REQUEST_TIMEOUT,
+    EXIT_FATAL,
+)
 
 
 def _transform_purl(
     purl: str,
 ) -> str:
-    if not purl.startswith("pkg:rl/"):
-        return f"pkg:rl/{purl}"
+    k = "pkg:rl"
+    if not purl.startswith(k):
+        return f"{k}/{purl}"
 
     return purl
 
@@ -39,7 +43,6 @@ class PortalAPI:
         self.api_token = os.environ.get("RLPORTAL_ACCESS_TOKEN")
 
         self.proxies = {}
-
         proxy_server = os.environ.get("RLSECURE_PROXY_SERVER", None)
         proxy_port = os.environ.get("RLSECURE_PROXY_PORT", None)
         proxy_user = os.environ.get("RLSECURE_PROXY_USER", None)
@@ -68,13 +71,13 @@ class PortalAPI:
             return
 
         response = self.get_package_versions()
-        if response.status_code not in [200, 404]:
+        if response.status_code not in [200, 404, 401]:
             msg = (
                 f"Error: while validating force and replace parameters: get_package_versions(): {response.status_code}"
             )
             raise RuntimeError(msg)
 
-        if response.status_code == 404:
+        if response.status_code in [404, 401]:
             # if we have no versions at all we dont need replace or force
             self.params.replace = False
             self.params.force = False
@@ -100,30 +103,44 @@ class PortalAPI:
     ) -> str:
         params = self.params
 
+        if not params.rl_portal_host:
+            params.rl_portal_host = None
+
+        if not params.rl_portal_server:
+            params.rl_portal_server = None
+
         public_api_url = create_public_api_url(
-            params.rl_portal_server,
-            what,
+            rl_portal_host=params.rl_portal_host,
+            rl_portal_server=params.rl_portal_server,
+            what=what,
         )
 
         return f"{public_api_url}{params.rl_portal_org}/{params.rl_portal_group}/{path}"
 
     def _check_and_handle_http_error(
         self,
+        url: str,
         response: Response,
         should_exit: bool = True,
     ) -> None:
         try:
+            if self.params.debug:
+                print(url, response.status_code, file=sys.stderr)
             response.raise_for_status()
         except HTTPError as http_error:
+            if self.params.debug:
+                print(http_error, file=sys.stderr)
+
             try:
+
                 default_err_msg = f"Something went wrong with analysis report export {http_error}"
                 error_message = http_error.response.json()
-                reporter.info(error_message.get("error", default_err_msg))
+                reporter.error(error_message.get("error", default_err_msg))
             except JSONDecodeError as json_decode_error:
-                reporter.info(f"Something went wrong with your request {json_decode_error}")
+                reporter.error(f"Something went wrong with your request {json_decode_error}")
 
             if should_exit:
-                sys.exit(101)
+                sys.exit(EXIT_FATAL)
 
     def _auth_header(
         self,
@@ -132,13 +149,9 @@ class PortalAPI:
             "Authorization": f"Bearer {self.api_token}",
         }
 
-    def _do_get(
-        self,
-        what: str,
-        path: str,
-    ) -> Response:
+    def _do_get(self, url: str) -> Response:
         return requests.get(
-            self._public_api_url_to(what, path),
+            url,
             headers=self._auth_header(),
             proxies=self.proxies,
             timeout=REQUEST_TIMEOUT,
@@ -150,8 +163,8 @@ class PortalAPI:
         file: BinaryIO,
     ) -> Response:
         params = self.params
-        filename = params.filename if params.filename else os.path.basename(params.file_path)
 
+        filename = params.filename if params.filename else os.path.basename(params.file_path)
         headers = self._auth_header() | {
             "Content-Disposition": f"attachment; filename={filename}",
             "Content-Type": "application/octet-stream",
@@ -163,8 +176,9 @@ class PortalAPI:
                 query_params[name] = getattr(params, name)
 
         # https://docs.secure.software/api-reference/#tag/Version/operation/scanVersion
+        url = self._public_api_url_to("scan", params.purl)
         response = requests.post(
-            self._public_api_url_to("scan", params.purl),
+            url,
             headers=headers,
             proxies=self.proxies,
             data=file,
@@ -172,15 +186,16 @@ class PortalAPI:
             timeout=REQUEST_TIMEOUT,
         )
 
-        self._check_and_handle_http_error(response)
+        self._check_and_handle_http_error(url, response)
         return response
 
     def get_performed_checks(
         self,
     ) -> Response:
         # https://docs.secure.software/api-reference/#tag/Version/operation/getVersionChecks
-        response = self._do_get("checks", self.params.purl)
-        self._check_and_handle_http_error(response)
+        url = self._public_api_url_to("checks", self.params.purl)
+        response = self._do_get(url)
+        self._check_and_handle_http_error(url, response)
         return response
 
     def export_analysis_report(
@@ -188,29 +203,33 @@ class PortalAPI:
         report_format: str,
     ) -> Response:
         # https://docs.secure.software/api-reference/#tag/Version/operation/getVersionReport
-        response = self._do_get("report", f"{report_format}/{self.params.purl}")
-        self._check_and_handle_http_error(response, should_exit=False)
+        url = self._public_api_url_to("report", f"{report_format}/{self.params.purl}")
+        response = self._do_get(url)
+        self._check_and_handle_http_error(url, response, should_exit=False)
         return response
 
     def export_pack_safe(
         self,
     ) -> Response:
         # https://docs.secure.software/api-reference/#tag/Version/operation/getVersionReport
-        response = self._do_get("pack/safe", f"{self.params.purl}")
-        self._check_and_handle_http_error(response, should_exit=False)
+        url = self._public_api_url_to("pack/safe", f"{self.params.purl}")
+        response = self._do_get(url)
+        self._check_and_handle_http_error(url, response, should_exit=False)
         return response
 
     def get_analysis_status(
         self,
     ) -> Response:
         # https://docs.secure.software/api-reference/#tag/Version/operation/getVersionStatus
-        response = self._do_get("status", self.params.purl)
-        self._check_and_handle_http_error(response, should_exit=False)
+        url = self._public_api_url_to("status", self.params.purl)
+        response = self._do_get(url)
+        self._check_and_handle_http_error(url, response, should_exit=False)
         return response
 
     def get_package_versions(
         self,
     ) -> Response:
         # https://docs.secure.software/api-reference/#tag/Package/operation/listVersions
-        response = self._do_get("list", get_package_purl(self.params.purl))
+        url = self._public_api_url_to("list", get_package_purl(self.params.purl))
+        response = self._do_get(url)
         return response

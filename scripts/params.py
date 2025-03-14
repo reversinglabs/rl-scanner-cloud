@@ -6,18 +6,25 @@ from cimessages import MessageFormat
 
 @dataclass
 class Params:  # pylint: disable=too-many-instance-attributes
-    rl_portal_server: str
     rl_portal_org: str
     rl_portal_group: str
     purl: str
     file_path: str
     filename: str
-    replace: Optional[bool]
-    force: Optional[bool]
-    diff_with: Optional[str]
     message_reporter: MessageFormat
-    submit_only: Optional[bool]
     timeout: int
-    report_path: Optional[str]
-    report_format: Optional[str]
     pack_safe: bool = False
+
+    rl_portal_host: Optional[str] = None
+    rl_portal_server: Optional[str] = None
+
+    replace: Optional[bool] = None
+    force: Optional[bool] = None
+
+    diff_with: Optional[str] = None
+
+    submit_only: Optional[bool] = None
+    report_path: Optional[str] = None
+    report_format: Optional[str] = None
+
+    debug: Optional[bool] = None
