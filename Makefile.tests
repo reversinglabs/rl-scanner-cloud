@@ -1,0 +1,186 @@
+SHELL := /bin/bash
+
+# We always test against local build docker image
+
+ifdef DOCKER_TAG
+    BUILD_VERSION	:= $(DOCKER_TAG)
+else
+    BUILD_VERSION=latest
+endif
+
+IMAGE_BASE	:= reversinglabs/rl-scanner-cloud
+IMAGE_NAME	:= $(IMAGE_BASE):$(BUILD_VERSION)
+
+# testing parameters
+REPORT_DIR	:= reports
+REPORT_VOLUME := -v ./$(REPORT_DIR):/$(REPORT_DIR)
+
+ARTIFACT_ERR	:= eicarcom2.zip
+ARTIFACT_OK		:= bash
+
+# default is my
+ENVFILE := .envfile_rl-scanner-cloud.docker-my
+
+ifdef TEST_PLAYGROUND1
+	ENVFILE := .envfile_rl-scanner-cloud.docker-playground
+endif
+
+ifdef TEST_PLAYGROUND2
+	ENVFILE := .envfile_rl-scanner-cloud.docker-playground
+endif
+
+ifdef TEST_CANADA
+	ENVFILE := .envfile_rl-scanner-cloud.docker-canada
+endif
+
+export ENVFILE
+
+ENVIRONMENT := $$( grep -i '^ENVIRONMENT=' $(HOME)/$(ENVFILE) | grep -i -q 'DEVELOPMENT' && echo 'DEVELOPMENT' )
+
+# the next 2 lines on purpose no := , we want them to be evaluated each time they are referenced.
+DATE = $(shell date +%Y%m%d.%H%M%S )
+RL_PACKAGE_URL2	= test-project/test-package@$(DATE)
+
+COMMON_DOCKER := -i --rm \
+	-u $(shell id -u):$(shell id -u ) \
+	--env-file=$(HOME)/$(ENVFILE) \
+	-v ./input:/input
+
+COMMON_DOCKER_URL := -i --rm \
+	-u $(shell id -u):$(shell id -u ) \
+	--env-file=$(HOME)/$(ENVFILE)
+
+TEST_COMMON := --purl $(RL_PACKAGE_URL2) \
+	--replace --force
+
+TEST_PARAMS_SCAN_MY = \
+	--rl-portal-server test \
+	--rl-portal-org Test \
+	--rl-portal-group Default \
+	$(TEST_COMMON)
+
+TEST_PARAMS_SCAN_PLAYGROUND = \
+	--rl-portal-server playground \
+	--rl-portal-org ReversingLabs \
+	--rl-portal-group hello \
+	$(TEST_COMMON)
+
+TEST_PARAMS_SCAN_PLAYGROUND2 = \
+	--rl-portal-host playground.secure.software \
+	--rl-portal-org ReversingLabs \
+	--rl-portal-group hello \
+	$(TEST_COMMON)
+
+TEST_PARAMS_SCAN_CA = \
+    --rl-portal-host ca.secure.software \
+	--rl-portal-server test2 \
+	--rl-portal-org Test2 \
+	--rl-portal-group Default \
+	$(TEST_COMMON)
+
+# default test setup
+TEST_PARAMS_SCAN := $(TEST_PARAMS_SCAN_MY)
+
+ifdef TEST_PLAYGROUND1
+	TEST_PARAMS_SCAN := $(TEST_PARAMS_SCAN_PLAYGROUND)
+endif
+
+ifdef TEST_PLAYGROUND2
+	TEST_PARAMS_SCAN := $(TEST_PARAMS_SCAN_PLAYGROUND2)
+endif
+
+ifdef TEST_CANADA
+	TEST_PARAMS_SCAN := $(TEST_PARAMS_SCAN_CA)
+endif
+
+# ==========================
+# Testing
+# ==========================
+
+TESTS := testFail \
+	test_err \
+	test_err_with_report \
+	test_ok \
+	test_nowait \
+	test_ok_with_report \
+	test_url_ok_with_report
+
+# TESTS := test_url_ok_with_report
+
+test: $(TESTS)
+
+./input/$(ARTIFACT_ERR):
+	mkdir -m 777 -p input output tmp
+	curl -o ./input/$(ARTIFACT_ERR) -sS https://secure.eicar.org/$(ARTIFACT_ERR)
+
+./input/$(ARTIFACT_OK):
+	mkdir -m 777 -p input output tmp
+	cp /bin/$(ARTIFACT_OK) ./input/
+
+testFail:
+	# we know that specifying no arguments at all should print "Valid commands are" and fail
+	-docker run $(COMMON_DOCKER) $(IMAGE_NAME); echo -e -n "Exit code: $$?"
+	# we know that specifying no arguments to rl-scan should print usage() and fail
+	-docker run $(COMMON_DOCKER) $(IMAGE_NAME) \
+		rl-scan; echo -e -n "Exit code: $$?\n"
+	# specify al params except file path, this will fail
+	-docker run $(COMMON_DOCKER) $(IMAGE_NAME) \
+		rl-scan $(TEST_PARAMS_SCAN); echo -e -n "Exit code: $$?\n"
+
+test_ok: ./input/$(ARTIFACT_OK)
+	echo -e "\n## >>" $@
+	docker run $(COMMON_DOCKER) $(IMAGE_NAME) \
+		rl-scan $(TEST_PARAMS_SCAN) \
+			--file-path=/input/$(ARTIFACT_OK) \
+			2>&1 >tmp/$@.out; echo -e -n "Exit code: $$?\n"; cat tmp/$@.out;
+	ls -laR input >./tmp/list_in_out_ok.txt
+
+test_nowait: ./input/$(ARTIFACT_OK)
+	echo -e "\n## >>" $@
+	docker run $(COMMON_DOCKER) $(IMAGE_NAME) \
+		rl-scan $(TEST_PARAMS_SCAN) --file-path=/input/$(ARTIFACT_OK) --submit-only \
+			2>&1 >tmp/$@.out; echo -e -n "Exit code: $$?\n"; cat tmp/$@.out;
+	ls -laR input >./tmp/list_in_out_ok.txt
+
+test_ok_with_report: ./input/$(ARTIFACT_OK)
+	echo -e "\n## >>" $@
+	rm -rf $(REPORT_DIR) && mkdir $(REPORT_DIR)
+	docker run $(COMMON_DOCKER) $(REPORT_VOLUME) $(IMAGE_NAME) \
+		rl-scan $(TEST_PARAMS_SCAN) --file-path=/input/$(ARTIFACT_OK) \
+			--report-path /$(REPORT_DIR) \
+			--pack-safe --report-format all \
+			2>&1 >tmp/$@.out; echo -e -n "Exit code: $$?\n"; cat tmp/$@.out;
+	ls -laR input >./tmp/list_in_out_ok.txt
+	ls -laR $(REPORT_DIR)
+
+test_err: ./input/$(ARTIFACT_ERR)
+	echo -e "\n## >>" $@
+	# as we are now scanning a item that makes the scan fail (non zero exit code) we have to ignore the error in the makefile
+	-docker run $(COMMON_DOCKER) $(IMAGE_NAME) \
+		rl-scan $(TEST_PARAMS_SCAN) --file-path=/input/$(ARTIFACT_ERR) \
+			2>&1 >tmp/$@.out; echo -e -n "Exit code: $$?\n"; cat tmp/$@.out;
+	ls -laR input >./tmp/list_in_out_err.txt
+
+test_err_with_report: ./input/$(ARTIFACT_ERR)
+	echo -e "\n## >>" $@
+	rm -rf $(REPORT_DIR) && mkdir $(REPORT_DIR)
+	# as we are now scanning a item that makes the scan fail (non zero exit code) we have to ignore the error in the makefile
+	-docker run $(COMMON_DOCKER) $(REPORT_VOLUME) $(IMAGE_NAME) \
+		rl-scan $(TEST_PARAMS_SCAN) --file-path=/input/$(ARTIFACT_ERR) \
+			--report-path /$(REPORT_DIR) \
+			--pack-safe --report-format all \
+			2>&1 >tmp/$@.out; echo -e -n "Exit code: $$?\n"; cat tmp/$@.out;
+	ls -laR input >./tmp/list_in_out_err.txt
+
+IMPORT_URL := https://www.7-zip.org/a/7z2500-x64.exe
+# NOTE no input volume
+test_url_ok_with_report:
+	echo -e "\n## >>" $@
+	rm -rf $(REPORT_DIR) && mkdir $(REPORT_DIR)
+	docker run $(COMMON_DOCKER_URL) $(REPORT_VOLUME) $(IMAGE_NAME) \
+		rl-scan-url $(TEST_PARAMS_SCAN) --import-url=$(IMPORT_URL) \
+			--report-path /$(REPORT_DIR) \
+			--pack-safe --report-format all \
+			2>&1 >tmp/$@.out; echo -e -n "Exit code: $$?\n"; cat tmp/$@.out;
+	ls -laR input >./tmp/list_in_out_ok.txt
+	ls -laR $(REPORT_DIR)

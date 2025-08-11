@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import argparse
 import sys
-import os
 import traceback
 
 from cimessages import (
@@ -20,7 +19,8 @@ from post_scan import (
     export_pack_safe,
 )
 from validators import (
-    validate_params,
+    validate_report_formats,
+    validate_report_folder,
 )
 from constants import (
     DEFAULT_ATTEMPT_TIMEOUT_MIN,
@@ -29,10 +29,10 @@ from constants import (
 )
 
 
-def _build_argument_parser() -> argparse.ArgumentParser:
+def _build_argument_parser() -> Params:
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        prog="rl-scan",
+        prog="rl-scan-url",
         description="ReversingLabs: rl-scanner-cloud\n\n"
         "Extended product documentation is available at: https://docs.secure.software",
         epilog="Environment variables:\n"
@@ -45,6 +45,7 @@ def _build_argument_parser() -> argparse.ArgumentParser:
 
     supportedReports = ", ".join(list(REPORT_FORMATS.keys())) + ", all"
 
+    # portal params
     parser.add_argument(
         "--rl-portal-host",
         help="Portal Host that will do the scanning",
@@ -67,23 +68,14 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         required=True,
     )
 
+    # common for scan/status/report
     parser.add_argument(
         "--purl",
         required=True,
         help="Package URL used for the scan (format [pkg:namespace]/<project></package><@version>)",
     )
 
-    parser.add_argument(
-        "--file-path",
-        required=True,
-        help="Path to the file you want to scan",
-    )
-
-    parser.add_argument(
-        "--filename",
-        help="Defaults to the name of the selected file",
-    )
-
+    # scan parameters
     parser.add_argument(
         "--replace",
         action="store_true",
@@ -98,12 +90,6 @@ def _build_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="add additional verbosity during execution",
-    )
-
-    parser.add_argument(
         "--submit-only",
         action="store_true",
         help="Scan the file, and continue regardless of the scan outcome",
@@ -115,6 +101,15 @@ def _build_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--timeout",
+        type=int,
+        default=DEFAULT_ATTEMPT_TIMEOUT_MIN,
+        help="Amount of time user is willing to wait for analysis before failing."
+        + f" Defaults to {DEFAULT_ATTEMPT_TIMEOUT_MIN} minutes",
+    )
+
+    # messages
+    parser.add_argument(
         "--message-reporter",
         choices=list(MessageFormat),
         type=MessageFormat,
@@ -122,13 +117,7 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         help="Processing status message format",
     )
 
-    parser.add_argument(
-        "--timeout",
-        type=int,
-        default=DEFAULT_ATTEMPT_TIMEOUT_MIN,
-        help="Amount of time user is willing to wait for analysis before failing. Defaults to 20 minutes",
-    )
-
+    # report parameters
     parser.add_argument(
         "--report-format",
         type=str,
@@ -146,34 +135,75 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         help="Download a report.rl-safe archive into the report-path",
     )
 
-    return parser
+    # import url parameters
+    parser.add_argument(
+        "--import-url",
+        required=True,
+        help="The url you want to scan",
+    )
+
+    parser.add_argument(
+        "--auth-user",
+        help="The auth-user (if needed) to access the import-url",
+    )
+
+    parser.add_argument(
+        "--auth-pass",
+        help="The auth-password (if needed) to access the import-url",
+    )
+
+    parser.add_argument(
+        "--bearer-token",
+        help="The bearer-token (if needed) to access the import-url",
+    )
+
+    # debug
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="add additional verbosity during execution",
+    )
+
+    # scan additonal params (optional)
+    # max_size
+    # product
+    # publisher
+    # category
+    # license
+    # platform
+    # release_date
+
+    params = Params(**vars(parser.parse_args()))
+    validate_report_folder(params.report_path, params.report_format)
+    validate_report_formats(params.report_format)
+
+    if params.import_url and "://" not in params.import_url:
+        raise RuntimeError("--import-url should be url like, it has missing '://'")
+
+    if params.auth_user and params.bearer_token:
+        raise RuntimeError("--bearer-token cannot be used in combination with --auth-user")
+
+    if params.auth_pass and params.bearer_token:
+        raise RuntimeError("--bearer-token cannot be used in combination with --auth-pass")
+
+    return params
 
 
 def main() -> int:
-    parser: argparse.ArgumentParser = _build_argument_parser()
-    params = Params(**vars(parser.parse_args()))
-    validate_params(params)
-    if params.debug:
-        print(params, file=sys.stderr)
+    params: Params = _build_argument_parser()
 
     reporter.set_format(params.message_reporter)
     scanner = PortalAPI(params)
 
-    assert params.file_path is not None
-    file_path: str = params.file_path
-    file_name: str = params.filename if params.filename else os.path.basename(file_path)
-
     # SCAN
-    with reporter.progress_block("Scanning version"):
-        with open(file_path, "rb") as file_stream:
-            scanner.scan_file_version(
-                file_stream=file_stream,
-                file_name=file_name,
-            )
-            if params.submit_only:
-                reporter.info("submit-only flag present, skip waiting for analysis result")
-                reporter.show_scan_result(None)
-                return 0
+    assert params.import_url is not None
+    import_url: str = params.import_url
+    with reporter.progress_block("Scanning Url version"):
+        scanner.scan_import_url_version(import_url=import_url)
+        if params.submit_only:
+            reporter.info("submit-only flag present, skip waiting for analysis result")
+            reporter.show_scan_result(None)
+            return 0
 
     # STATUS
     with reporter.progress_block("Fetching analysis status"):
@@ -217,10 +247,11 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Error: rl_scan: {str(e)}")
 
-        try:
-            raise TypeError("Again !?!")
-        except:
-            pass
+        if 0:
+            try:
+                raise TypeError("Again !?!")
+            except:
+                pass
 
         traceback.print_tb(e.__traceback__)
         sys.exit(EXIT_FATAL)

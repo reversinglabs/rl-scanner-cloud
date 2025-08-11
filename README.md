@@ -118,10 +118,16 @@ The following environment variables can be used with this image.
 | `RLSECURE_PROXY_USER`   | No | User name for proxy authentication. |
 | `RLSECURE_PROXY_PASSWORD` | No | Password for proxy authentication. Required if `RLSECURE_PROXY_USER` is used. |
 
+## Commands
 
-## Configuration parameters
+The `rl-scanner-cloud` image supports the following commands:
 
-The `rl-scanner-cloud` image supports the following parameters.
+- rl-scan: scan a file using `--file-path`
+- rl-scan-url: scan a url using `--import-url`
+
+## Configuration parameters rl-scan
+
+The `rl-scanner-cloud rl-scan` image supports the following parameters.
 
 | Parameter            | Required | Description |
 | -------------------- | ---      | ----        |
@@ -130,7 +136,7 @@ The `rl-scanner-cloud` image supports the following parameters.
 | `--rl-portal-org`    | **Yes** | Name of the Spectra Assure Portal organization to use for the scan. The organization must exist on the Portal instance specified with `--rl-portal-server`. The user account authenticated with the token must be a member of the specified organization and have the appropriate permissions to upload and scan a file. Organization names are case-sensitive. |
 | `--rl-portal-group`  | **Yes** | Name of the Spectra Assure Portal group to use for the scan. The group must exist in the Portal organization specified with `--rl-portal-org`. Group names are case-sensitive. |
 | `--purl`             | **Yes** | The package URL (purl) used to associate the file with a project and package on the Portal. Package URLs are unique identifiers in the format `[pkg:type/]<project></package><@version>`. When scanning a file, you must assign a package URL to it, so that it can be placed into the specified project and package as a version. If the project and package you specified don't exist in the Portal, they will be automatically created. The `pkg:type/` part of the package URL can be freely omitted, because the default value `pkg:rl/` is always automatically added. To analyze a reproducible build artifact of a package version, you must append the `?build=repro` parameter to the package URL of the artifact when scanning it, in the format `<project></package><@version?build=repro>`. |
-| `--file-path`        | **Yes** | Path to the file you want to scan. The specified file must exist in the **package source** directory mounted to the Docker container. The file must be in any of the [formats supported by Spectra Assure](https://docs.secure.software/concepts/reference). The file size on disk must not exceed 10 GB. |
+| `--file-path`        | **Yes** | Path to the file you want to scan. The specified file must exist in the **package source** directory mounted to the Docker container. The file must be in any of the [formats supported by Spectra Assure](https://docs.secure.software/concepts/reference). The file size on disk must not exceed 50 GB. |
 | `--filename`         | No  | Optional name for the file you want to scan. If omitted, defaults to the file name specified with `--file-path`. When the file is uploaded and analyzed on the Portal, this file name is visible in the reports. |
 | `--replace`          | No  | Replace (overwrite) an already existing package version with the file you're uploading. |
 | `--force`            | No  | In Spectra Assure Portal, a package can only have a limited amount of versions. If a package already has the maximum number of versions, you can use this optional parameter to delete the oldest version of the package and make space for the version you're uploading. |
@@ -141,6 +147,31 @@ The `rl-scanner-cloud` image supports the following parameters.
 | `--report-path`      | No  | Path to the location where you want to store analysis reports. The specified path must exist in the reports destination directory mounted to the container. |
 | `--report-format`    | No  | A comma-separated list of [report formats](https://docs.secure.software/concepts/analysis-reports) to generate. Supported values: cyclonedx, sarif, spdx, rl-json, rl-checks, rl-cve, rl-uri, rl-summary-pdf, all. |
 | `--pack-safe`    | No  | When this parameter is used, the RL-SAFE archive is automatically downloaded together with other specified report formats. The [RL-SAFE archive](https://docs.secure.software/concepts/analysis-reports#rl-safe-archive) is a convenient way to get the full SAFE report and all other supported report formats for a software package in a single file. The archive can be freely shared and moved between different computers, and viewed without requiring a Spectra Assure product license. To open the archive and work with it, you need [the SAFE Viewer](https://docs.secure.software/safe-viewer) - a free, cross-platform tool developed by ReversingLabs. By default, the RL-SAFE archive is named `report.rl-safe` and stored in `--report-path` (required). |
+
+## Configuration parameters rl-scan-url
+
+The `rl-scanner-cloud rl-scan` image supports the following parameters.
+
+| Parameter            | Required | Description |
+| -------------------- | ---      | ----        |
+| `--rl-portal-host` | No | Name of the Spectra Assure Portal host to use for the scan. Default: `my.secure.software`. <br>Typically, there is no need to specify this unless you have a dedicated host for your company, in which case you don't need to specify the `--rl-portal-server` parameter. |
+| `--rl-portal-server` | No | Name of the Spectra Assure Portal instance (tenant) to use for the scan. <br>The Portal instance name usually matches the subdirectory of `my.secure.software` in your Portal URL. For example, if your portal URL is `my.secure.software/demo`, the instance name to use with this parameter is `demo`. |
+| `--rl-portal-org`  | **Yes** | Name of the Spectra Assure Portal organization to use for the scan. The organization must exist on the Portal instance specified with `--rl-portal-server`. The user account authenticated with the token must be a member of the specified organization and have the appropriate permissions to upload and scan a file. Organization names are case-sensitive. |
+| `--rl-portal-group`| **Yes** | Name of the Spectra Assure Portal group to use for the scan. The group must exist in the Portal organization specified with `--rl-portal-org`. Group names are case-sensitive. |
+| `--purl`           | **Yes** | The package URL (purl) used to associate the file with a project and package on the Portal. Package URLs are unique identifiers in the format `[pkg:type/]<project></package><@version>`. When scanning a url, you must assign a package URL to it, so that it can be placed into the specified project and package as a version. If the project and package you specified don't exist in the Portal, they will be automatically created. The `pkg:type/` part of the package URL can be freely omitted, because the default value `pkg:rl/` is always automatically added. |
+| `--replace`        | No  | Replace (overwrite) an already existing package version with the url you're uploading. |
+| `--force`          | No  | In Spectra Assure Portal, a package can only have a limited amount of versions. If a package already has the maximum number of versions, you can use this optional parameter to delete the oldest version of the package and make space for the version you're uploading. |
+| `--diff-with`      | No  | This optional parameter lets you specify a previous package version against which you want to compare (diff) the version you're uploading. The specified version must exist in the package. |
+| `--submit-only`    | No | With this optional parameter, you skip waiting for the analysis result. When this parameter is used, the analysis report URL is not displayed in the output. The text `Scan status: NONE` will be displayed as there is no scan result. |
+| `--timeout`        | No | This optional parameter lets you specify how long the container should wait for analysis to complete before exiting (in minutes). The parameter accepts any integer from 10 to 1440. The default timeout is 20 minutes. |
+| `--message-reporter` | No  | Optional parameter that changes the format of output messages (STDOUT) for easier integration with CI tools. Supported values: `text`, `teamcity`. |
+| `--report-path`    | No  | Path to the location where you want to store analysis reports. The specified path must exist in the reports destination directory mounted to the container. |
+| `--report-format`  | No  | A comma-separated list of [report formats](https://docs.secure.software/concepts/analysis-reports) to generate. Supported values: cyclonedx, sarif, spdx, rl-json, rl-checks, rl-cve, rl-uri, rl-summary-pdf, all. |
+| `--pack-safe`      | No  | When this parameter is used, the RL-SAFE archive is automatically downloaded together with other specified report formats. The [RL-SAFE archive](https://docs.secure.software/concepts/analysis-reports#rl-safe-archive) is a convenient way to get the full SAFE report and all other supported report formats for a software package in a single file. The archive can be freely shared and moved between different computers, and viewed without requiring a Spectra Assure product license. To open the archive and work with it, you need [the SAFE Viewer](https://docs.secure.software/safe-viewer) - a free, cross-platform tool developed by ReversingLabs. By default, the RL-SAFE archive is named `report.rl-safe` and stored in `--report-path` (required). |
+| `--import-url` | **Yes** | The url where the file can be downloaded, when authentication is required use the `--auth-user,--auth-pass` or `--bearer-token` parameters |
+| `--auth-user`      | No | Specify when downloading the import-url requires basic authentication. Cannot be combined with `--bearer-token` |
+| `--auth-pass`      | No | Specify when downloading the import-url requires basic authentication. Cannot be combined with `--bearer-token` |
+| `--bearer-token`   | No | Specify when downloading the import-url requires token authentication. Cannot be combined with either `--auth-user` or `--auth-pass` |
 
 
 ## Return codes
@@ -186,7 +217,6 @@ After the file is uploaded to the Portal, it's visible in the web interface whil
         --rl-portal-group demo-group \
         --purl my-project/my-package@1.0 \
         --file-path /packages/demo-packages/MyPackage_1.exe
-
 
 
 4. When the analysis is complete, the command output displays the direct link to the analysis report as `Report URL`. The Docker container then exits automatically. You can access the analysis report and continue to work with the package version you just uploaded in the Portal web interface.
@@ -273,13 +303,53 @@ Other configuration parameters are the same in this example as in the other exam
       -v "$(pwd)/packages:/packages:ro" \
       -e RLPORTAL_ACCESS_TOKEN=exampletoken \
       reversinglabs/rl-scanner-cloud \
-      rl-scan \
-        --rl-portal-server demo \
-        --rl-portal-org ExampleOrg \
-        --rl-portal-group demo-group \
-        --purl my-project/my-package@1.0?build=repro \
-        --file-path /packages/demo-packages/MyPackage_1-build1.exe
+        rl-scan \
+          --rl-portal-server demo \
+          --rl-portal-org ExampleOrg \
+          --rl-portal-group demo-group \
+          --purl my-project/my-package@1.0?build=repro \
+          --file-path /packages/demo-packages/MyPackage_1-build1.exe
 
 
 The analysis report will contain the **Reproducibility** tab with the reproducibility check status and a summary of differences between the reproducible build artifact and the main artifact ("Reference Version" in the report).
 In the Portal web interface, you can expand the package version details to find *Reproducible build check* in the summary of checks and select *Details* to open the report.
+
+
+### Scan a package version from a URL and download analysis reports
+
+To scan a file from a URL, you need to specify the `--import-url` parameter. When authentication is required for downloading the file from a URL, specify either the `--auth-user, --auth-pass` or the `--bearer-token` parameters.
+
+To download analysis reports,
+  you can use the `--report-path` and `--report-format` parameters when scanning a file.
+These parameters are optional,
+  but they must be used together.
+
+To store the reports to a specific location,
+  you must use an additional volume and make sure Docker can write to it.
+In this example,
+  we're adding the volume with `-v "$(pwd)/reports:/reports"`,
+  so the destination directory is going to be called `reports`.
+This destination directory must be created empty before starting the container.
+You will then specify it in the Docker command with the `--report-path` parameter.
+
+The `--report-format` parameter accepts any of the supported report formats (cyclonedx, sarif, spdx, rl-json, rl-checks, rl-cve, rl-uri).
+To request multiple formats at once, specify them as a comma-separated list.
+The special value `all` will download all supported report formats.
+
+The following command will scan a package version (1.0) after retrieving it from a URL
+  and save all supported report formats into the `/reports` directory on the mounted volume.
+
+
+    docker run --rm \
+      -u $(id -u):$(id -g) \
+      -e RLPORTAL_ACCESS_TOKEN=exampletoken \
+      -v ./reports:/reports \
+      reversinglabs/rl-scanner-cloud \
+        rl-scan-url \
+          --rl-portal-server demo \
+          --rl-portal-org ExampleOrg \
+          --rl-portal-group demo-group \
+          --purl my-project/my-package@1.0 \
+          --import-url=https://www.7-zip.org/a/7z2500-x64.exe \
+          --report-path /reports \
+          --report-format all

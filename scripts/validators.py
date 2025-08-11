@@ -20,10 +20,10 @@ def _validate_file(
         raise RuntimeError("File does not exist")
 
     if os.path.getsize(file_path) > UPLOAD_FILE_SIZE_LIMIT:
-        raise RuntimeError("File size is larger than 10GB")
+        raise RuntimeError("File size is larger than 50GB")
 
 
-def _validate_folder(
+def validate_report_folder(
     report_path: Optional[str],
     report_format: Optional[str],
 ) -> None:
@@ -43,13 +43,17 @@ def _validate_folder(
         raise RuntimeError("--report-path needs to point to an empty directory!")
 
 
-def _validate_report_formats(
+def validate_report_formats(
     report_format: Optional[str],
 ) -> List[str]:
+    # return list is actually never used by caller
     if not report_format:
         return []
 
-    return parse_report_formats(report_format)
+    return parse_report_formats(report_format)  # may raise a error
+
+
+# Public
 
 
 def validate_purl(
@@ -62,6 +66,7 @@ def validate_purl(
 
 
 def validate_params(params: Params) -> None:
-    _validate_file(params.file_path)
-    _validate_folder(params.report_path, params.report_format)
-    _validate_report_formats(params.report_format)
+    if params.file_path:
+        _validate_file(params.file_path)
+    validate_report_folder(params.report_path, params.report_format)
+    validate_report_formats(params.report_format)

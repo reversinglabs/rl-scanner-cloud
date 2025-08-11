@@ -26,13 +26,13 @@ if __name__ == "__main__":
         usage()
 
     try:
-        sys.exit(
-            subprocess.run(
-                sys.argv[1:],
-                shell=False,
-                check=False,
-            ).returncode,
-        )
+        rr = subprocess.run(
+            sys.argv[1:],
+            shell=False,
+            check=False,
+        ).returncode
+
+        sys.exit(rr)
     except Exception as e:
         print(f"Error: {sys.argv[1:]}; {str(e)}")
         sys.exit(EXIT_FATAL)

@@ -1,0 +1,88 @@
+SHELL := /bin/bash
+
+# -----------------------------------------------------
+# venv stuff to pin a specific python version
+# note: pylama breaks on 3.12 if you dont install setuptools
+
+# rockylinux-9 has python 3.9.xx
+# rockylinux-10 has python 3.12.xx
+MIN_PYTHON_VERSION 	:= python3.9
+# MIN_PYTHON_VERSION 	:= python3.12
+
+VENV 				:= ./vtmp/
+
+export MIN_PYTHON_VERSION
+export VENV
+
+PIP_INSTALL := pip3 -q \
+	--require-virtualenv \
+	--disable-pip-version-check \
+	--no-color install
+
+COMMON_VENV := rm -rf $(VENV); \
+	$(MIN_PYTHON_VERSION) -m venv $(VENV); \
+	source ./$(VENV)/bin/activate;
+
+LINE_LENGTH	:= 120
+PL_LINTERS	:= "eradicate,mccabe,pycodestyle,pyflakes,pylint"
+PL_IGNORE	:= C0114,C0115,C0116,C0301,E203
+
+SCRIPTS		:= scripts/
+SCRIPTS2	:= \
+	scripts/entrypoint \
+	scripts/rl-scan \
+	scripts/rl-scan-url
+
+MYPY_INSTALL := types-requests
+
+# ==========================
+# Code format and verify
+# ==========================
+prep: clean black pylama mypy
+
+clean:
+	rm -rf $(VENV)
+	rm -rf .mypy_cache */.mypy_cache
+
+black:
+	$(COMMON_VENV) \
+	$(PIP_INSTALL) black; \
+	black \
+		--line-length $(LINE_LENGTH) \
+		$(SCRIPTS) $(SCRIPTS2)
+
+pylama:
+	$(COMMON_VENV) \
+	$(PIP_INSTALL) setuptools pylama; \
+	pylama \
+		--max-line-length $(LINE_LENGTH) \
+		--linters "${PL_LINTERS}" \
+		--ignore "${PL_IGNORE}" \
+		$(SCRIPTS) $(SCRIPTS2)
+
+# each item having main must be scanned separate with mypy, otherwise duplicate function
+mypy: mypy1 mypy2 mypy3
+
+mypy1:
+	$(COMMON_VENV) \
+	$(PIP_INSTALL) mypy $(MYPY_INSTALL); \
+	mypy \
+		--strict \
+		--no-incremental \
+		$(SCRIPTS)/ $(SCRIPTS)/entrypoint
+
+mypy2:
+	$(COMMON_VENV) \
+	$(PIP_INSTALL) mypy $(MYPY_INSTALL); \
+	mypy \
+		--strict \
+		--no-incremental \
+		$(SCRIPTS)/ $(SCRIPTS)/rl-scan
+
+mypy3:
+	$(COMMON_VENV) \
+	$(PIP_INSTALL) mypy $(MYPY_INSTALL); \
+	mypy \
+		--strict \
+		--no-incremental \
+		$(SCRIPTS)/ $(SCRIPTS)/rl-scan-url

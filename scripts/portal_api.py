@@ -1,6 +1,10 @@
 import os
 import sys
-from typing import BinaryIO
+from typing import (
+    BinaryIO,
+    Dict,
+    Any,
+)
 
 import requests
 from requests import Response
@@ -39,15 +43,14 @@ class PortalAPI:
         self,
         params: Params,
     ) -> None:
-        self.params = params
-        self.api_token = os.environ.get("RLPORTAL_ACCESS_TOKEN")
+        self.params: Params = params
+        self.api_token: str = str(os.environ.get("RLPORTAL_ACCESS_TOKEN"))
+        self.proxies: Dict[str, str] = {}
 
-        self.proxies = {}
         proxy_server = os.environ.get("RLSECURE_PROXY_SERVER", None)
         proxy_port = os.environ.get("RLSECURE_PROXY_PORT", None)
         proxy_user = os.environ.get("RLSECURE_PROXY_USER", None)
         proxy_password = os.environ.get("RLSECURE_PROXY_PASSWORD", None)
-
         if proxy_server is not None:
             self.proxies = {
                 "http": f"http://{proxy_user}:{proxy_password}@{proxy_server}:{proxy_port}",
@@ -98,6 +101,7 @@ class PortalAPI:
 
     def _public_api_url_to(
         self,
+        *,
         what: str,
         path: str,
     ) -> str:
@@ -147,6 +151,7 @@ class PortalAPI:
     ) -> dict[str, str]:
         return {
             "Authorization": f"Bearer {self.api_token}",
+            "User-Agent": "rl-scanner-cloud",
         }
 
     def _do_get(self, url: str) -> Response:
@@ -158,44 +163,114 @@ class PortalAPI:
         )
 
     # Public
-    def scan_version(
+    # todo: scan_version_url
+    # todo: scan_version_docker
+    def scan_file_version(
         self,
-        file: BinaryIO,
+        *,
+        file_stream: BinaryIO,
+        file_name: str,
     ) -> Response:
         params = self.params
 
-        filename = params.filename if params.filename else os.path.basename(params.file_path)
         headers = self._auth_header() | {
-            "Content-Disposition": f"attachment; filename={filename}",
+            "Content-Disposition": f"attachment; filename={file_name}",
             "Content-Type": "application/octet-stream",
         }
 
         query_params = {}
-        for name in ["force", "replace", "diff_with"]:
+        for name in [
+            "force",
+            "replace",
+            "diff_with",
+        ]:
             if getattr(params, name, False):
                 query_params[name] = getattr(params, name)
 
         # https://docs.secure.software/api-reference/#tag/Version/operation/scanVersion
-        url = self._public_api_url_to("scan", params.purl)
+        url = self._public_api_url_to(
+            what="scan",
+            path=params.purl,
+        )
         response = requests.post(
             url,
             headers=headers,
             proxies=self.proxies,
-            data=file,
+            data=file_stream,
             params=query_params,
             timeout=REQUEST_TIMEOUT,
         )
 
-        self._check_and_handle_http_error(url, response)
+        self._check_and_handle_http_error(
+            url,
+            response,
+        )
+        return response
+
+    def scan_import_url_version(
+        self,
+        *,
+        import_url: str,
+    ) -> Response:
+        headers: Dict[str, str] = self._auth_header() | {
+            "Content-Type": "application/json",
+        }
+        qp_names = [
+            "force",
+            "replace",
+            "diff_with",
+        ]
+        query_params: Dict[str, Any] = {}
+        for name in qp_names:
+            if getattr(self.params, name, False):
+                query_params[name] = getattr(self.params, name)
+
+        data: Dict[str, Any] = {
+            "url": import_url,
+        }
+
+        if self.params.bearer_token:
+            data["bearer-token"] = self.params.bearer_token
+        else:
+            if self.params.auth_user:
+                data["auto-user"] = self.params.auth_user
+            if self.params.auth_pass:
+                data["auto-pass"] = self.params.auth_pass
+
+        # https://docs.secure.software/api-reference/#tag/Version/operation/scanVersion
+        url = self._public_api_url_to(
+            what="url-import",
+            path=self.params.purl,
+        )
+
+        response = requests.post(
+            url,
+            headers=headers,
+            proxies=self.proxies,
+            json=data,
+            params=query_params,
+            timeout=REQUEST_TIMEOUT,
+        )
+
+        self._check_and_handle_http_error(
+            url,
+            response,
+        )
         return response
 
     def get_performed_checks(
         self,
     ) -> Response:
         # https://docs.secure.software/api-reference/#tag/Version/operation/getVersionChecks
-        url = self._public_api_url_to("checks", self.params.purl)
+        url = self._public_api_url_to(
+            what="checks",
+            path=self.params.purl,
+        )
         response = self._do_get(url)
-        self._check_and_handle_http_error(url, response)
+        self._check_and_handle_http_error(
+            url,
+            response,
+        )
         return response
 
     def export_analysis_report(
@@ -203,33 +278,59 @@ class PortalAPI:
         report_format: str,
     ) -> Response:
         # https://docs.secure.software/api-reference/#tag/Version/operation/getVersionReport
-        url = self._public_api_url_to("report", f"{report_format}/{self.params.purl}")
+        url = self._public_api_url_to(
+            what="report",
+            path=f"{report_format}/{self.params.purl}",
+        )
         response = self._do_get(url)
-        self._check_and_handle_http_error(url, response, should_exit=False)
+        self._check_and_handle_http_error(
+            url,
+            response,
+            should_exit=False,
+        )
         return response
 
     def export_pack_safe(
         self,
     ) -> Response:
         # https://docs.secure.software/api-reference/#tag/Version/operation/getVersionReport
-        url = self._public_api_url_to("pack/safe", f"{self.params.purl}")
+        url = self._public_api_url_to(
+            what="pack/safe",
+            path=f"{self.params.purl}",
+        )
         response = self._do_get(url)
-        self._check_and_handle_http_error(url, response, should_exit=False)
+        self._check_and_handle_http_error(
+            url,
+            response,
+            should_exit=False,
+        )
         return response
 
     def get_analysis_status(
         self,
     ) -> Response:
         # https://docs.secure.software/api-reference/#tag/Version/operation/getVersionStatus
-        url = self._public_api_url_to("status", self.params.purl)
+        url = self._public_api_url_to(
+            what="status",
+            path=self.params.purl,
+        )
         response = self._do_get(url)
-        self._check_and_handle_http_error(url, response, should_exit=False)
+        self._check_and_handle_http_error(
+            url,
+            response,
+            should_exit=False,
+        )
         return response
 
     def get_package_versions(
         self,
     ) -> Response:
         # https://docs.secure.software/api-reference/#tag/Package/operation/listVersions
-        url = self._public_api_url_to("list", get_package_purl(self.params.purl))
+        url = self._public_api_url_to(
+            what="list",
+            path=get_package_purl(
+                self.params.purl,
+            ),
+        )
         response = self._do_get(url)
         return response

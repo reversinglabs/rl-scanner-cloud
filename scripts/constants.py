@@ -3,23 +3,27 @@ from typing import (
     List,
 )
 
-UPLOAD_FILE_SIZE_LIMIT = 10 * 1024 * 1024 * 1024  # 10GB
+UPLOAD_FILE_SIZE_LIMIT = 50 * 1024 * 1024 * 1024  # 50GB
 
 REPORT_FORMATS = {  # https://docs.secure.software/api-reference/#tag/Version/operation/getVersionReport
-    "sarif": "report.sarif.json",
     "cyclonedx": "report.cyclonedx.json",
+    "sarif": "report.sarif.json",
     "spdx": "report.spdx.json",
-    "rl-json": "report.rl.json",
     "rl-checks": "report.checks.json",
     "rl-cve": "report.cve.csv",
-    "rl-uri": "report.uri.csv",
+    "rl-json": "report.rl.json",
     "rl-summary-pdf": "report.summary.pdf",
+    "rl-uri": "report.uri.csv",
 }
+
 
 _DEV = os.getenv("ENVIRONMENT", "") == "DEVELOPMENT"
 
 SCANNER_COMMANDS: List[str] = [
     "rl-scan",
+    "rl-scan-url",
+    # "rl-scan-purl",
+    # "rl-scan-docker",
 ]
 
 EXIT_FATAL: int = 101

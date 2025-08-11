@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM rockylinux:9-minimal
+FROM rockylinux/rockylinux:9-minimal
 
 # LABEL info from: https://github.com/opencontainers/image-spec/blob/main/annotations.md
 
@@ -17,8 +17,8 @@ RUN microdnf upgrade -y && \
 COPY scripts/* /opt/rl-scanner-cloud/
 
 RUN chmod 755 /opt/rl-scanner-cloud/entrypoint \
-              /opt/rl-scanner-cloud/rl-scan
+              /opt/rl-scanner-cloud/rl-scan \
+              /opt/rl-scanner-cloud/rl-scan-url
 
 ENV PATH="/opt/rl-scanner-cloud:${PATH}"
-
 ENTRYPOINT ["/opt/rl-scanner-cloud/entrypoint"]
