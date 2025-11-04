@@ -48,9 +48,18 @@ class PortalAPI:
         self.proxies: Dict[str, str] = {}
 
         proxy_server = os.environ.get("RLSECURE_PROXY_SERVER", None)
+        if proxy_server and len(proxy_server) == 0:
+            proxy_server = None
         proxy_port = os.environ.get("RLSECURE_PROXY_PORT", None)
+        if proxy_port and len(proxy_port) == 0:
+            proxy_port = None
         proxy_user = os.environ.get("RLSECURE_PROXY_USER", None)
+        if proxy_user and len(proxy_user) == 0:
+            proxy_user = None
         proxy_password = os.environ.get("RLSECURE_PROXY_PASSWORD", None)
+        if proxy_password and len(proxy_password) == 0:
+            proxy_password = None
+
         if proxy_server is not None:
             self.proxies = {
                 "http": f"http://{proxy_user}:{proxy_password}@{proxy_server}:{proxy_port}",

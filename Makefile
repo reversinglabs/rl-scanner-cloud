@@ -18,11 +18,11 @@ all: clean prep build test
 
 prep:
 	make -f Makefile.prep
+	mkdir -m 777 -p input output tmp
 
 clean:
-	rm -rf $(DIST) reports tmp input output
+	rm -rf $(DIST) reports tmp input output vtmp
 	-docker rmi $(IMAGE_NAME)
-	mkdir -m 777 -p input output tmp
 	docker image ls | grep rl-scanner-cloud || exit 0
 
 # =============================

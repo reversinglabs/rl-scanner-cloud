@@ -6,8 +6,8 @@ SHELL := /bin/bash
 
 # rockylinux-9 has python 3.9.xx
 # rockylinux-10 has python 3.12.xx
-MIN_PYTHON_VERSION 	:= python3.9
-# MIN_PYTHON_VERSION 	:= python3.12
+# MIN_PYTHON_VERSION 	:= python3.9
+MIN_PYTHON_VERSION 	:= python3.12
 
 VENV 				:= ./vtmp/
 
