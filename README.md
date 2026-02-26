@@ -9,12 +9,12 @@ The `rl-scanner-cloud` Docker image provides access to commonly used Portal Proj
 You can also compare different package versions in a project, perform reproducibility checks for a package version, and save analysis reports to local storage.
 All successfully analyzed files are visible in the Portal interface, and accessible by you and any other Portal users who can access your projects.
 
-This Docker image is based on Rocky Linux 9.
+This Docker image is based on Rocky Linux 10.
 
 
 ## What is the Spectra Assure Portal?
 
-The Spectra Assure Portal is a SaaS solution that's part of the Spectra Assure platform - a new ReversingLabs solution for software supply chain security.
+The Spectra Assure Portal is a SaaS solution that's part of the Spectra Assure platform - a ReversingLabs solution for software supply chain security.
 More specifically, the Portal is a web-based application for improving and managing the security of your software releases and verifying third-party software used in your organization.
 
 With the Spectra Assure Portal, you can:
@@ -353,3 +353,5 @@ The following command will scan a package version (1.0) after retrieving it from
           --import-url=https://www.7-zip.org/a/7z2500-x64.exe \
           --report-path /reports \
           --report-format all
+
+<!-- 2026-02-26; ReversingLabs Spectra Assure v2026.2.2-0; v2.0.12; -->
