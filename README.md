@@ -355,3 +355,4 @@ The following command will scan a package version (1.0) after retrieving it from
           --report-format all
 
 <!-- 2026-02-26; ReversingLabs Spectra Assure v2026.2.2-0; v2.0.12; -->
+<!-- 2026-05-26; ReversingLabs Spectra Assure v2026.5.1-0; v2.0.13; -->
