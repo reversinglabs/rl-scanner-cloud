@@ -1,0 +1,79 @@
+SHELL := /bin/bash
+
+# We always test against local build docker image
+
+ifdef DOCKER_TAG
+    BUILD_VERSION	:= $(DOCKER_TAG)
+else
+    BUILD_VERSION=latest
+endif
+
+IMAGE_BASE	:= reversinglabs/rl-scanner-cloud
+IMAGE_NAME	:= $(IMAGE_BASE):$(BUILD_VERSION)
+
+# testing parameters
+REPORT_DIR	:= reports
+REPORT_VOLUME := -v ./$(REPORT_DIR):/$(REPORT_DIR)
+REPORTS := --report-path /$(REPORT_DIR) --pack-safe --report-format all
+
+ARTIFACT_OK		:= bash
+
+ENVFILE := .envfile_rl-scanner-cloud.docker-my
+export ENVFILE
+
+DATE := $(shell date +%Y%m%d.%H%M%S )
+RL_PACKAGE_URL2	= test-project/test-package@$(DATE)
+RL_PACKAGE_REPRO= test-project/test-package@$(DATE)?build=repro
+
+COMMON_DOCKER := -i --rm \
+	-u $(shell id -u):$(shell id -u ) \
+	--env-file=$(HOME)/$(ENVFILE) \
+	-v ./input:/input
+
+TEST_COMMON = --purl $(RL_PACKAGE_URL2) --replace --force --debug
+TEST_COMMON_REPRO := --purl $(RL_PACKAGE_REPRO) --debug
+
+TEST_PARAMS_SCAN_MY := \
+	--rl-portal-server test \
+	--rl-portal-org Test \
+	--rl-portal-group Default \
+	$(TEST_COMMON)
+
+TEST_PARAMS_SCAN_MY_REPRO := \
+	--rl-portal-server test \
+	--rl-portal-org Test \
+	--rl-portal-group Default \
+	$(TEST_COMMON_REPRO)
+
+# default test setup
+TEST_PARAMS_SCAN := $(TEST_PARAMS_SCAN_MY)
+TEST_PARAMS_SCAN_REPRO := $(TEST_PARAMS_SCAN_MY_REPRO)
+
+# ==========================
+# Testing
+# ==========================
+
+TESTS := test_ok_with_report test_repro
+
+test: $(TESTS)
+
+./input/$(ARTIFACT_OK):
+	mkdir -m 777 -p input output tmp
+	cp /bin/$(ARTIFACT_OK) ./input/
+
+test_ok_with_report: ./input/$(ARTIFACT_OK)
+	echo -e "\n## >>" $@
+	rm -rf $(REPORT_DIR) && mkdir $(REPORT_DIR)
+	docker run $(COMMON_DOCKER) $(REPORT_VOLUME) $(IMAGE_NAME) \
+		rl-scan $(TEST_PARAMS_SCAN) --file-path=/input/$(ARTIFACT_OK) \
+			$(REPORTS) \
+			2>&1 >tmp/$@.out; echo -e -n "Exit code: $$?\n"; cat tmp/$@.out; exit $$?
+
+test_repro: ./input/$(ARTIFACT_OK)
+	echo -e "\n## >>" $@
+	rm -rf $(REPORT_DIR) && mkdir $(REPORT_DIR)
+	docker run $(COMMON_DOCKER) $(REPORT_VOLUME) $(IMAGE_NAME) \
+		rl-scan $(TEST_PARAMS_SCAN_REPRO) \
+			--file-path=/input/$(ARTIFACT_OK) \
+			$(REPORTS) \
+			2>&1 >tmp/$@.out; echo -e -n "Exit code: $$?\n"; cat tmp/$@.out; exit $$?; exit $$?

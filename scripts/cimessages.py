@@ -1,14 +1,9 @@
 from __future__ import annotations
 
 import abc
+from collections.abc import Iterator
 from contextlib import contextmanager
 from enum import Enum
-from typing import (
-    List,
-    Dict,
-    Any,
-    Optional,
-)
 
 
 class MessageFormat(Enum):
@@ -21,7 +16,14 @@ class MessageFormat(Enum):
 
 class Messages(abc.ABC):
     @classmethod
-    def create(cls, name: str) -> Any:
+    def create(
+        cls,
+        name: str,
+    ) -> Messages:
+        if name not in ["teamcity", "text"]:
+            raise ValueError(f"Fatal: unknown type: {name}")
+
+        # factory: creates a class and returns it
         if name == "teamcity":
             return TeamCityMessages()
         return TextMessages()
@@ -49,71 +51,92 @@ class Messages(abc.ABC):
     @abc.abstractmethod
     def show_scan_result(
         self,
-        passed: Optional[bool],
+        passed: bool | None,
     ) -> None:
         pass
 
     @contextmanager
-    def progress_block(self, msg: str) -> Any:
+    def progress_block(self, msg: str) -> Iterator[None]:
         self.block_start(msg)
-        yield
-        self.block_end(msg)
+        try:
+            yield
+        finally:
+            self.block_end(msg)
 
 
 class TextMessages(Messages):
+    @classmethod
+    def _format_line(
+        cls,
+        msg: dict[str, str] | str,
+    ) -> str:
+        def _escape(m: str) -> str:
+            escape_map: dict[str, str] = {
+                "\n": " ",
+                "\r": " ",
+            }
+            return "".join(escape_map.get(x, x) for x in m)
+
+        if isinstance(msg, dict):
+            msg_content: list[str] = [f"{k}='{_escape(v)}'" for k, v in msg.items()]
+            return " ".join(msg_content)
+        return _escape(msg)
+
     def block_start(
         self,
         msg: str,
     ) -> None:
-        print(f"Started: {msg}", flush=True)
+        print(f"Started: {self._format_line(msg)}", flush=True)
 
     def block_end(
         self,
         msg: str,
     ) -> None:
-        print(f"Finished: {msg}", flush=True)
+        print(f"Finished: {self._format_line(msg)}", flush=True)
 
     def info(
         self,
         msg: str,
     ) -> None:
-        print(f"Info: {msg}", flush=True)
+        print(f"Info: {self._format_line(msg)}", flush=True)
 
     def error(
         self,
         msg: str,
     ) -> None:
-        print(f"Error: {msg}", flush=True)
+        print(f"Error: {self._format_line(msg)}", flush=True)
 
     def with_prefix(
         self,
         prefix: str,
         msg: str,
     ) -> None:
-        print(f"{prefix}: {msg}", flush=True)
+        print(f"{prefix}: {self._format_line(msg)}", flush=True)
 
     def show_scan_result(
         self,
-        passed: Optional[bool],
+        passed: bool | None,
     ) -> None:
         if passed is None:
             print("Scan result: NONE", flush=True)
-        else:
-            if passed:
-                print("Scan result: PASS", flush=True)
-            else:
-                print("Scan result: FAIL", flush=True)
+            return
+
+        if passed:
+            print("Scan result: PASS", flush=True)
+            return
+
+        print("Scan result: FAIL", flush=True)
 
 
 class TeamCityMessages(Messages):
     @classmethod
-    def service_message(
+    def _format_service_message(
         cls,
         name: str,
-        msg: Any,
+        msg: dict[str, str] | str,
     ) -> str:
-        def escape(m: str) -> str:
-            escape_map: Dict[str, str] = {
+        def _escape(m: str) -> str:
+            escape_map: dict[str, str] = {
                 "'": "|'",
                 "|": "||",
                 "\n": "|n",
@@ -124,30 +147,17 @@ class TeamCityMessages(Messages):
             return "".join(escape_map.get(x, x) for x in m)
 
         if isinstance(msg, dict):
-            msg_content: List[str] = [f"{k}='{escape(v)}'" for k, v in msg.items()]
+            msg_content: list[str] = [f"{k}='{_escape(v)}'" for k, v in msg.items()]
             return f"##teamcity[{name} {' '.join(msg_content)}]"
-        return f"##teamcity[{name} '{escape(msg)}']"
 
-    def block_start(
-        self,
-        msg: str,
-    ) -> None:
-        print(TeamCityMessages.service_message("progressStart", msg), flush=True)
-        print(TeamCityMessages.service_message("blockOpened", {"name": msg}), flush=True)
-
-    def block_end(
-        self,
-        msg: str,
-    ) -> None:
-        print(TeamCityMessages.service_message("blockClosed", {"name": msg}), flush=True)
-        print(TeamCityMessages.service_message("progressFinish", msg), flush=True)
+        return f"##teamcity[{name} '{_escape(msg)}']"
 
     def __build_problem(
         self,
         msg: str,
     ) -> None:
         print(
-            TeamCityMessages.service_message("buildProblem", {"description": msg}),
+            self._format_service_message("buildProblem", {"description": msg}),
             flush=True,
         )
 
@@ -155,62 +165,51 @@ class TeamCityMessages(Messages):
         self,
         msg: str,
     ) -> None:
-        print(TeamCityMessages.service_message("buildStatus", {"text": msg}), flush=True)
+        print(self._format_service_message("buildStatus", {"text": msg}), flush=True)
+
+    def block_start(
+        self,
+        msg: str,
+    ) -> None:
+        print(self._format_service_message("progressStart", msg), flush=True)
+        print(self._format_service_message("blockOpened", {"name": msg}), flush=True)
+
+    def block_end(
+        self,
+        msg: str,
+    ) -> None:
+        print(self._format_service_message("blockClosed", {"name": msg}), flush=True)
+        print(self._format_service_message("progressFinish", msg), flush=True)
 
     def info(
         self,
         msg: str,
     ) -> None:
-        print(TeamCityMessages.service_message("message", {"text": msg}), flush=True)
+        print(self._format_service_message("message", {"text": msg}), flush=True)
 
     def error(
         self,
         msg: str,
     ) -> None:
-        print(TeamCityMessages.service_message("message", {"text": msg}), flush=True)
+        print(self._format_service_message("message", {"text": msg, "status": "ERROR"}), flush=True)
 
     def with_prefix(
         self,
         prefix: str,
         msg: str,
     ) -> None:
-        print(TeamCityMessages.service_message(prefix, msg), flush=True)
+        print(self._format_service_message(prefix, msg), flush=True)
 
     def show_scan_result(
         self,
-        passed: Optional[bool],
+        passed: bool | None,
     ) -> None:
         if passed is None:
             self.__build_status("Scan result: NONE")
-        else:
-            if passed:
-                self.__build_status("Scan result: PASS")
-            else:
-                self.__build_problem("Scan result: FAIL")
+            return
 
+        if passed:
+            self.__build_status("Scan result: PASS")
+            return
 
-class Reporter:
-    def __init__(
-        self,
-    ) -> None:
-        self._underlying: Optional[Messages] = None
-
-    def set_format(
-        self,
-        msg_format: MessageFormat,
-    ) -> None:
-        self._underlying = Messages.create(msg_format.value)
-
-    def __getattr__(
-        self,
-        attr: str,
-    ) -> Any:
-        if not self._underlying:
-            raise AttributeError("Set reporter format using `set_format` " + "before calling `__getattr__`")
-
-        if attr in self.__dict__:
-            return getattr(self, attr)
-        return getattr(self._underlying, attr)
-
-
-reporter = Reporter()
+        self.__build_problem("Scan result: FAIL")

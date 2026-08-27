@@ -1,77 +1,47 @@
 #!/usr/bin/env python3
 import argparse
-import sys
 import os
-import traceback
+from typing import Any
 
-from cimessages import (
-    MessageFormat,
-    reporter,
+from cimessages import Messages
+from constants import (
+    DESCRIPTION_TEXT,
+    EPILOG_TEXT,
+    GB,
+    UPLOAD_FILE_SIZE_LIMIT,
 )
 from helpers import (
-    get_portal_url,
+    common_arguments,
+    parse_report_formats,
+    runner,
+    valid_timeout,
+    validate_report_folder,
+    validate_server_host,
 )
 from params import Params
 from portal_api import PortalAPI
-from post_scan import (
-    get_analysis_url,
-    get_scan_status,
-    export_analysis_report,
-    export_pack_safe,
-)
-from validators import (
-    validate_params,
-)
-from constants import (
-    DEFAULT_ATTEMPT_TIMEOUT_MIN,
-    REPORT_FORMATS,
-    EXIT_FATAL,
-)
+from post_scan import PostScan
 
 
-def _build_argument_parser() -> argparse.ArgumentParser:
+def _validate_file_path(
+    file_path: str,
+) -> None:
+    if not os.path.isfile(file_path):
+        raise RuntimeError(f"That is not a existing file: {file_path}")
+
+    if os.path.getsize(file_path) > UPLOAD_FILE_SIZE_LIMIT:
+        raise RuntimeError(f"File size is larger than {int(UPLOAD_FILE_SIZE_LIMIT / GB)}GB")
+
+
+def _collect_params() -> Params:
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
         prog="rl-scan",
-        description="ReversingLabs: rl-scanner-cloud\n\n"
-        "Extended product documentation is available at: https://docs.secure.software",
-        epilog="Environment variables:\n"
-        "  RLPORTAL_ACCESS_TOKEN    - Token used for access to the Portal\n"
-        "  RLSECURE_PROXY_SERVER    - Server URL for local proxy\n"
-        "  RLSECURE_PROXY_PORT      - Network port for local proxy\n"
-        "  RLSECURE_PROXY_USER      - User name for proxy authentication\n"
-        "  RLSECURE_PROXY_PASSWORD  - Password for proxy authentication\n",
+        description=DESCRIPTION_TEXT,
+        epilog=EPILOG_TEXT,
     )
 
-    supportedReports = ", ".join(list(REPORT_FORMATS.keys())) + ", all"
-
-    parser.add_argument(
-        "--rl-portal-host",
-        help="Portal Host that will do the scanning",
-        required=False,
-    )
-
-    parser.add_argument(
-        "--rl-portal-server",
-        help="Portal tenant that will do the scanning",
-        required=False,
-    )
-
-    parser.add_argument(
-        "--rl-portal-org",
-        required=True,
-    )
-
-    parser.add_argument(
-        "--rl-portal-group",
-        required=True,
-    )
-
-    parser.add_argument(
-        "--purl",
-        required=True,
-        help="Package URL used for the scan (format [pkg:namespace]/<project></package><@version>)",
-    )
+    common_arguments(parser)
 
     parser.add_argument(
         "--file-path",
@@ -84,143 +54,61 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         help="Defaults to the name of the selected file",
     )
 
-    parser.add_argument(
-        "--replace",
-        action="store_true",
-        help="Replace the existing package version within the package, or reproducible build if build type is repro",
-    )
+    data: dict[str, Any] = vars(parser.parse_args())
+    params = Params(**data)
+    validate_server_host(params)
 
-    parser.add_argument(
-        "--force",
-        action="store_true",
-        help="If a package has the maximum number of versions, then the oldest version of the package will be "
-        "deleted to make space for the version you're uploading",
-    )
+    # --------------------------------
+    if not params.file_path:
+        raise RuntimeError("Fatal: you must specify a file-path")
+    _validate_file_path(params.file_path)
+    # --------------------------------
 
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="add additional verbosity during execution",
-    )
-
-    parser.add_argument(
-        "--submit-only",
-        action="store_true",
-        help="Scan the file, and continue regardless of the scan outcome",
-    )
-
-    parser.add_argument(
-        "--diff-with",
-        help="Selected analyzed package version to compare against the uploaded version",
-    )
-
-    parser.add_argument(
-        "--message-reporter",
-        choices=list(MessageFormat),
-        type=MessageFormat,
-        default=MessageFormat.TEXT,
-        help="Processing status message format",
-    )
-
-    parser.add_argument(
-        "--timeout",
-        type=int,
-        default=DEFAULT_ATTEMPT_TIMEOUT_MIN,
-        help="Amount of time user is willing to wait for analysis before failing. Defaults to 20 minutes",
-    )
-
-    parser.add_argument(
-        "--report-format",
-        type=str,
-        help="A comma-separated list of report formats to generate. Supported values: " + f"{supportedReports}",
-    )
-
-    parser.add_argument(
-        "--report-path",
-        help="Path to a directory where the selected reports will be saved",
-    )
-
-    parser.add_argument(
-        "--pack-safe",
-        action="store_true",
-        help="Download a report.rl-safe archive into the report-path",
-    )
-
-    return parser
+    validate_report_folder(params)
+    params.report_format = parse_report_formats(params)
+    return params
 
 
 def main() -> int:
-    parser: argparse.ArgumentParser = _build_argument_parser()
-    params = Params(**vars(parser.parse_args()))
-    validate_params(params)
-    if params.debug:
-        print(params, file=sys.stderr)
+    rr: int = 101
+    session = None
+    try:
+        params: Params = _collect_params()
+        reporter = Messages.create(params.message_reporter.value)
+        params.timeout = valid_timeout(reporter, params.timeout)
+        scanner = PortalAPI(params, reporter)
+        session = scanner.session
+        scanner.transform_force_and_replace_params()
 
-    reporter.set_format(params.message_reporter)
-    scanner = PortalAPI(params)
+        file_path: str = str(params.file_path)
+        file_name: str = params.filename if params.filename else os.path.basename(file_path)
 
-    assert params.file_path is not None
-    file_path: str = params.file_path
-    file_name: str = params.filename if params.filename else os.path.basename(file_path)
+        # SCAN ------------------------------
+        with reporter.progress_block("Scanning version"):
+            with open(file_path, "rb") as file_stream:
+                scanner.scan_file_version(
+                    file_stream=file_stream,
+                    file_name=file_name,
+                )
+                if params.submit_only:
+                    reporter.info("submit-only flag present, skip waiting for analysis result")
+                    reporter.show_scan_result(None)
+                    return 0
 
-    # SCAN
-    with reporter.progress_block("Scanning version"):
-        with open(file_path, "rb") as file_stream:
-            scanner.scan_file_version(
-                file_stream=file_stream,
-                file_name=file_name,
-            )
-            if params.submit_only:
-                reporter.info("submit-only flag present, skip waiting for analysis result")
-                reporter.show_scan_result(None)
-                return 0
-
-    # STATUS
-    with reporter.progress_block("Fetching analysis status"):
-        scan_status = get_scan_status(scanner, params.timeout)
-        passed_analysis = scan_status == "pass"
-        reporter.show_scan_result(passed_analysis)
-
-    # REPORTS
-    with reporter.progress_block("Getting the report URL"):
-        analysis_url = get_analysis_url(scanner)
-        portal_url = get_portal_url(
-            rl_portal_host=params.rl_portal_host,
-            rl_portal_server=params.rl_portal_server,
+        ps = PostScan(
+            params=params,
+            reporter=reporter,
+            scanner=scanner,
         )
-        report_url = f"{portal_url}/{analysis_url}"
-        reporter.with_prefix("Report URL", report_url)
+        rr = ps.after_scan()
+    except Exception as e:
+        reporter.error(f"Exception: {e}")
+    finally:
+        if session:
+            session.close()
 
-    if params.report_format and params.report_path:
-        with reporter.progress_block("Exporting analysis report"):
-            export_analysis_report(
-                scanner,
-                params.report_format,
-                params.report_path,
-            )
-
-    if params.pack_safe and params.report_path:
-        with reporter.progress_block("Exporting rl-safe archive"):
-            export_pack_safe(
-                scanner,
-                params.report_path,
-            )
-
-    # DONE
-    return 0 if passed_analysis else 1
+    return rr
 
 
 if __name__ == "__main__":
-    try:
-        rr: int = main()
-        sys.exit(rr)
-    except Exception as e:
-        print(f"Error: rl_scan: {str(e)}")
-
-        try:
-            raise TypeError("Again !?!")
-        except:
-            pass
-
-        traceback.print_tb(e.__traceback__)
-        sys.exit(EXIT_FATAL)
+    runner(main)

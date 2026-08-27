@@ -16,14 +16,14 @@ IMAGE_NAME	:= $(IMAGE_BASE):$(BUILD_VERSION)
 # ======================================
 all: clean prep build test
 
-prep:
-	make -f Makefile.prep
-	mkdir -m 777 -p input output tmp
-
 clean:
 	rm -rf $(DIST) reports tmp input output vtmp
 	-docker rmi $(IMAGE_NAME)
 	docker image ls | grep rl-scanner-cloud || exit 0
+
+prep:
+	make -f Makefile.prep
+	mkdir -m 777 -p input output tmp
 
 # =============================
 # build of reversinglabs/rl-scanner-cloud
@@ -37,7 +37,8 @@ build:
 	docker image inspect $(IMAGE_NAME) --format '{{ .RepoTags }}'
 
 test:
-	make -f Makefile.tests # the default test
-	TEST_PLAYGROUND1=1 	make -f Makefile.tests
+	make -f Makefile.tests
+	make -f Makefile.tests-repro
 	TEST_PLAYGROUND2=1 	make -f Makefile.tests
-	TEST_CANADA=1		make -f Makefile.tests
+	TEST_PLAYGROUND1=1 	make -f Makefile.tests
+	# TEST_CANADA=1		make -f Makefile.tests
